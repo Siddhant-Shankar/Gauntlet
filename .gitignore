@@ -5,9 +5,8 @@ __pycache__/
 .ruff_cache/
 .pytest_cache/
 .env
-.env.*
-!.env.example
 results/
+demo/*.db
 CLAUDE.md
 
 # Personal prep notes, kept out of the repo

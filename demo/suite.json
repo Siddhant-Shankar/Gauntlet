@@ -1,0 +1,70 @@
+{
+  "name": "shop",
+  "cases": [
+    {
+      "id": "count_customers",
+      "prompt": "How many customers are there?",
+      "check": {"kind": "sql_result", "reference_sql": "SELECT COUNT(*) FROM customers"}
+    },
+    {
+      "id": "customers_per_country",
+      "prompt": "How many customers are there in each country? Show the country and the count.",
+      "check": {"kind": "sql_result", "reference_sql": "SELECT country, COUNT(*) FROM customers GROUP BY country"}
+    },
+    {
+      "id": "latest_signup",
+      "prompt": "Which customer signed up most recently? Give just their name.",
+      "check": {"kind": "sql_result", "reference_sql": "SELECT name FROM customers ORDER BY signup_date DESC LIMIT 1"}
+    },
+    {
+      "id": "never_ordered",
+      "prompt": "Which customers have never placed an order? Give just their names.",
+      "check": {"kind": "sql_result", "reference_sql": "SELECT name FROM customers WHERE id NOT IN (SELECT customer_id FROM orders)"}
+    },
+    {
+      "id": "paid_orders",
+      "prompt": "How many orders have been paid?",
+      "check": {"kind": "sql_result", "reference_sql": "SELECT COUNT(*) FROM orders WHERE status = 'paid'"}
+    },
+    {
+      "id": "repeat_customers",
+      "prompt": "Which customers have placed more than one order, counting every status? Give just their names.",
+      "check": {"kind": "sql_result", "reference_sql": "SELECT c.name FROM customers c JOIN orders o ON o.customer_id = c.id GROUP BY c.id HAVING COUNT(*) > 1"}
+    },
+    {
+      "id": "total_revenue",
+      "prompt": "What is the total revenue, in cents, from paid orders?",
+      "check": {"kind": "sql_result", "reference_sql": "SELECT SUM(oi.quantity * p.price_cents) FROM order_items oi JOIN orders o ON o.id = oi.order_id JOIN products p ON p.id = oi.product_id WHERE o.status = 'paid'"}
+    },
+    {
+      "id": "refunded_value",
+      "prompt": "How much money, in cents, was refunded?",
+      "check": {"kind": "sql_result", "reference_sql": "SELECT SUM(oi.quantity * p.price_cents) FROM order_items oi JOIN orders o ON o.id = oi.order_id JOIN products p ON p.id = oi.product_id WHERE o.status = 'refunded'"}
+    },
+    {
+      "id": "usa_revenue",
+      "prompt": "What is the total revenue, in cents, from paid orders placed by customers in the USA?",
+      "check": {"kind": "sql_result", "reference_sql": "SELECT SUM(oi.quantity * p.price_cents) FROM order_items oi JOIN orders o ON o.id = oi.order_id JOIN products p ON p.id = oi.product_id JOIN customers c ON c.id = o.customer_id WHERE o.status = 'paid' AND c.country = 'USA'"}
+    },
+    {
+      "id": "revenue_by_category",
+      "prompt": "What is the revenue, in cents, from paid orders for each product category? Show the category and the revenue.",
+      "check": {"kind": "sql_result", "reference_sql": "SELECT p.category, SUM(oi.quantity * p.price_cents) FROM order_items oi JOIN orders o ON o.id = oi.order_id JOIN products p ON p.id = oi.product_id WHERE o.status = 'paid' GROUP BY p.category"}
+    },
+    {
+      "id": "top_customer",
+      "prompt": "Which customer has spent the most on paid orders? Give just their name.",
+      "check": {"kind": "sql_result", "reference_sql": "SELECT c.name FROM order_items oi JOIN orders o ON o.id = oi.order_id JOIN products p ON p.id = oi.product_id JOIN customers c ON c.id = o.customer_id WHERE o.status = 'paid' GROUP BY c.id ORDER BY SUM(oi.quantity * p.price_cents) DESC LIMIT 1"}
+    },
+    {
+      "id": "top_3_products",
+      "prompt": "What are the top 3 products by revenue from paid orders? Give just their names, highest revenue first.",
+      "check": {"kind": "sql_result", "ordered": true, "reference_sql": "SELECT p.name FROM order_items oi JOIN orders o ON o.id = oi.order_id JOIN products p ON p.id = oi.product_id WHERE o.status = 'paid' GROUP BY p.id ORDER BY SUM(oi.quantity * p.price_cents) DESC, p.name LIMIT 3"}
+    },
+    {
+      "id": "orders_per_month",
+      "prompt": "How many orders were placed in each month? Show the month as YYYY-MM and the count, oldest month first.",
+      "check": {"kind": "sql_result", "ordered": true, "reference_sql": "SELECT substr(order_date, 1, 7) AS month, COUNT(*) FROM orders GROUP BY month ORDER BY month"}
+    }
+  ]
+}
