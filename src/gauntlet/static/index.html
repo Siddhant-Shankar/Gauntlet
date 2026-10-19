@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gauntlet</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<main>
+  <h1>Gauntlet</h1>
+  <p class="muted">Durable eval runs on Temporal. Start a run, watch it, and review what no check could decide.</p>
+
+  <section class="card">
+    <h2>Start a run</h2>
+    <form id="start-form">
+      <label>Suite <select id="suite"></select></label>
+      <label>Attempts per case (k) <input id="k" type="number" min="1" max="20" value="3"></label>
+      <fieldset>
+        <legend>Agents (one run each)</legend>
+        <div id="agents"></div>
+      </fieldset>
+      <button type="submit">Start</button>
+      <p id="start-error" class="error" role="alert"></p>
+    </form>
+  </section>
+
+  <section class="card">
+    <div class="row">
+      <h2>Recent runs</h2>
+      <a id="compare-link" class="button secondary" href="/compare">Compare selected</a>
+    </div>
+    <div class="table-box">
+      <table>
+        <thead><tr><th>Compare</th><th>Run</th><th>Status</th><th>Started</th></tr></thead>
+        <tbody id="runs"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+<script>
+const selected = new Set();
+
+async function loadOptions() {
+  const options = await api("/api/options");
+  document.getElementById("suite").replaceChildren(
+    ...options.suites.map((name) => el("option", { value: name }, name)),
+  );
+  document.getElementById("agents").replaceChildren(
+    ...options.agents.map((name, i) =>
+      el("label", { class: "check" },
+        el("input", { type: "checkbox", name: "agent", value: name, ...(i === 1 ? { checked: "" } : {}) }),
+        name)),
+  );
+}
+
+function updateCompareLink() {
+  const ids = [...selected].map(encodeURIComponent).join(",");
+  document.getElementById("compare-link").href = `/compare?runs=${ids}`;
+}
+
+async function loadRuns() {
+  const runs = await api("/api/runs");
+  document.getElementById("runs").replaceChildren(
+    ...runs.map((run) =>
+      el("tr", {},
+        el("td", {}, el("input", {
+          type: "checkbox",
+          "aria-label": `compare ${run.run_id}`,
+          ...(selected.has(run.run_id) ? { checked: "" } : {}),
+          onchange: (event) => {
+            if (event.target.checked) selected.add(run.run_id);
+            else selected.delete(run.run_id);
+            updateCompareLink();
+          },
+        })),
+        el("td", {}, el("a", { href: `/runs/${encodeURIComponent(run.run_id)}` }, run.run_id)),
+        el("td", {}, run.status.toLowerCase()),
+        el("td", {}, new Date(run.started).toLocaleString()),
+      )),
+  );
+}
+
+document.getElementById("start-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const error = document.getElementById("start-error");
+  error.textContent = "";
+  const agents = [...document.querySelectorAll("input[name=agent]:checked")].map((box) => box.value);
+  if (agents.length === 0) {
+    error.textContent = "Pick at least one agent.";
+    return;
+  }
+  try {
+    const runIds = await api("/api/runs", {
+      method: "POST",
+      body: JSON.stringify({
+        suite: document.getElementById("suite").value,
+        k: Number(document.getElementById("k").value),
+        agents,
+      }),
+    });
+    location.href = runIds.length === 1
+      ? `/runs/${encodeURIComponent(runIds[0])}`
+      : `/compare?runs=${runIds.map(encodeURIComponent).join(",")}`;
+  } catch (e) {
+    error.textContent = e.message;
+  }
+});
+
+loadOptions().catch((e) => { document.getElementById("start-error").textContent = e.message; });
+loadRuns();
+setInterval(loadRuns, 5000);
+</script>
+</body>
+</html>

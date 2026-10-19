@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compare runs</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<main>
+  <p><a href="/">← All runs</a></p>
+  <h1>Compare runs</h1>
+  <p class="muted">One column per run. Each cell is how many of the k attempts passed.</p>
+  <p id="error" class="error" role="alert"></p>
+  <section class="card table-box"><table id="table"></table></section>
+</main>
+<script src="/static/app.js"></script>
+<script>
+const runIds = (new URLSearchParams(location.search).get("runs") || "")
+  .split(",").filter(Boolean).map(decodeURIComponent);
+
+function render(views) {
+  const caseIds = views.length ? views[0].cases.map((c) => c.case.id) : [];
+  const header = el("tr", {}, el("th", {}, "case"),
+    views.map((v) => el("th", {}, el("a", { href: `/runs/${encodeURIComponent(v.run_id)}` },
+      `${v.config.agent} (k = ${v.config.k})`))));
+  const rows = caseIds.map((id) => el("tr", {}, el("td", {}, id), views.map((v) => {
+    const found = v.cases.find((c) => c.case.id === id);
+    if (!found || !found.score) return el("td", { class: "muted" }, "running");
+    const s = found.score;
+    return el("td", { class: s.passes_all ? "cell-pass" : "cell-fail" }, `${s.passed}/${s.k}`);
+  })));
+  const totalRow = (label, pick) => el("tr", {}, el("th", {}, label), views.map((v) => {
+    const t = totals(v);
+    return el("th", {}, `${pick(t)} of ${t.total}`);
+  }));
+  document.getElementById("table").replaceChildren(
+    el("thead", {}, header),
+    el("tbody", {}, rows),
+    el("tfoot", {},
+      totalRow("pass^k: every attempt passed", (t) => t.passesAll),
+      totalRow("pass@k: some attempt passed", (t) => t.passesSome)),
+  );
+}
+
+async function refresh() {
+  if (runIds.length === 0) {
+    document.getElementById("error").textContent = "Pick runs to compare on the start page.";
+    return;
+  }
+  try {
+    const views = await Promise.all(runIds.map((id) => api(`/api/runs/${encodeURIComponent(id)}`)));
+    render(views);
+    if (views.some((v) => v.status === "RUNNING")) setTimeout(refresh, 3000);
+  } catch (e) {
+    document.getElementById("error").textContent = e.message;
+  }
+}
+
+refresh();
+</script>
+</body>
+</html>

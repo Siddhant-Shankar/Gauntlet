@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gauntlet run</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<main>
+  <p><a href="/">← All runs</a></p>
+  <h1 id="title">Run</h1>
+  <p id="summary" class="muted"></p>
+  <p id="banner" class="banner" hidden></p>
+  <div id="cases"></div>
+</main>
+<script src="/static/app.js"></script>
+<script>
+const runId = decodeURIComponent(location.pathname.split("/").pop());
+const runPath = `/api/runs/${encodeURIComponent(runId)}`;
+const drafts = new Map(); // review notes typed but not sent yet, so a refresh never loses them
+let lastJson = "";
+let timer;
+
+function showBanner(text) {
+  const banner = document.getElementById("banner");
+  banner.textContent = text;
+  banner.hidden = !text;
+}
+
+async function sendReview(caseId, attempt, passed, errorBox) {
+  const key = `${caseId}#${attempt}`;
+  const note = (drafts.get(key) || "").trim();
+  if (!note) {
+    errorBox.textContent = "Add a note saying why.";
+    return;
+  }
+  try {
+    await api(`${runPath}/cases/${encodeURIComponent(caseId)}/review`, {
+      method: "POST",
+      body: JSON.stringify({ attempt, passed, note }),
+    });
+    drafts.delete(key);
+    refresh();
+  } catch (e) {
+    errorBox.textContent = e.message;
+  }
+}
+
+function reviewForm(caseId, attempt) {
+  const key = `${caseId}#${attempt.number}`;
+  const errorBox = el("p", { class: "error", role: "alert" });
+  const note = el("textarea", {
+    "aria-label": `note for ${caseId} attempt ${attempt.number}`,
+    placeholder: "Why is this right or wrong?",
+    oninput: (event) => drafts.set(key, event.target.value),
+  });
+  note.value = drafts.get(key) || "";
+  return el("div", { class: "review" },
+    note,
+    el("div", { class: "buttons" },
+      el("button", { type: "button", onclick: () => sendReview(caseId, attempt.number, true, errorBox) }, "Pass"),
+      el("button", { type: "button", class: "secondary", onclick: () => sendReview(caseId, attempt.number, false, errorBox) }, "Fail"),
+    ),
+    errorBox,
+  );
+}
+
+function caseCard(caseView, k) {
+  const { case: item, attempts, score } = caseView;
+  let progress = "waiting for a worker";
+  if (score) progress = `${score.passed}/${score.k} passed`;
+  else if (attempts) progress = `${attempts.length} of ${k} attempts done`;
+  return el("section", { class: "card" },
+    el("div", { class: "row" }, el("h2", {}, item.id), el("span", { class: "muted" }, progress)),
+    el("p", {}, item.prompt),
+    el("details", {}, el("summary", {}, "Reference SQL"), el("pre", {}, item.check.reference_sql)),
+    (attempts || []).map((attempt) =>
+      el("div", { class: "attempt" },
+        el("div", { class: "row" },
+          el("strong", {}, `Attempt ${attempt.number}`),
+          kindChip(attempt.outcome),
+        ),
+        detailOf(attempt.outcome) && el("p", { class: "muted" }, detailOf(attempt.outcome)),
+        attempt.reply !== null && el("pre", {}, attempt.reply),
+        attempt.outcome.kind === "needs_review" && reviewForm(item.id, attempt),
+      )),
+  );
+}
+
+function render(view) {
+  const t = totals(view);
+  const k = view.config.k;
+  document.title = `${view.suite.name} · ${view.config.agent}`;
+  document.getElementById("title").textContent = `${view.suite.name} · ${view.config.agent}`;
+  document.getElementById("summary").textContent =
+    `${view.status.toLowerCase()} · k = ${k} · pass^${k} ${t.passesAll} of ${t.total} · ` +
+    `pass@${k} ${t.passesSome} of ${t.total} · ${t.finished} of ${t.total} cases finished`;
+  const workerMissing = view.status === "RUNNING" && view.cases.some((c) => c.attempts === null);
+  if (workerMissing) showBanner("No worker is answering. Start one: uv run --env-file .env gauntlet worker");
+  else if (view.status === "FAILED") showBanner("This run failed. A reference query may be broken; the Temporal UI has the details.");
+  else showBanner("");
+  document.getElementById("cases").replaceChildren(...view.cases.map((c) => caseCard(c, k)));
+}
+
+async function refresh() {
+  clearTimeout(timer);
+  let view;
+  try {
+    view = await api(runPath);
+  } catch (e) {
+    showBanner(e.message);
+    timer = setTimeout(refresh, 3000);
+    return;
+  }
+  const json = JSON.stringify(view);
+  if (json !== lastJson) {
+    lastJson = json;
+    render(view);
+  }
+  if (view.status === "RUNNING") timer = setTimeout(refresh, 2000);
+}
+
+refresh();
+</script>
+</body>
+</html>
