@@ -61,6 +61,7 @@ def test_schema_of_a_missing_database_raises(tmp_path: Path) -> None:
         ("Here you go:\n```sql\nSELECT 1\n```\nThis counts rows.", "SELECT 1"),
         ("```sql\nSELECT 1\n```\nor:\n```sql\nSELECT 2\n```", "SELECT 1"),
         ("```sql\nSELECT 1", "SELECT 1"),
+        ("SELECT 1;\n```", "SELECT 1;"),
         ("There are 2 customers.", "There are 2 customers."),
     ],
     ids=[
@@ -74,6 +75,7 @@ def test_schema_of_a_missing_database_raises(tmp_path: Path) -> None:
         "prose around the fence",
         "first block wins",
         "reply cut off before closing fence",
+        "only a closing fence, seen from Claude",
         "prose without a fence",
     ],
 )
