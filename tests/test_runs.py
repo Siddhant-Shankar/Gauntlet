@@ -20,7 +20,7 @@ from gauntlet.models import (
     Suite,
     Verdict,
 )
-from gauntlet.runs import load_run, recent_runs, review, run_results, start_run
+from gauntlet.runs import load_run, new_run_id, recent_runs, review, run_results, start_run
 from gauntlet.worker import build_worker
 
 pytestmark = pytest.mark.asyncio(loop_scope="module")
@@ -56,6 +56,10 @@ async def wait_for_view(client: Client, run_id: str, attempts: int) -> RunView:
         if case_attempts is not None and len(case_attempts) >= attempts:
             return view
         await asyncio.sleep(0.1)
+
+
+async def test_a_run_id_names_the_suite_and_agent() -> None:
+    assert new_run_id("shop", "claude-haiku-5-5").startswith("shop-claude-haiku-5-5-20")
 
 
 async def test_a_finished_run_reads_back_with_scores(client: Client, db_path: Path) -> None:
