@@ -17,10 +17,11 @@ class SqlResult(FrozenModel):
 
     kind: Literal["sql_result"] = "sql_result"  # lets a second check kind be added later
     reference_sql: str = Field(min_length=1)
+    ordered: bool = False  # set when the question asks for an order, e.g. "top 3 by sales"
 
 
 class Case(FrozenModel):
-    """One question for the agent. The agent only ever sees `prompt`."""
+    """One question for the agent. The agent never sees `check`."""
 
     id: str = Field(min_length=1)
     prompt: str = Field(min_length=1)

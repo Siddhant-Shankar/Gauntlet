@@ -72,6 +72,16 @@ def test_check_kind_is_filled_in_and_written_to_json() -> None:
     assert json.loads(check.model_dump_json())["kind"] == "sql_result"
 
 
+def test_row_order_is_ignored_by_default() -> None:
+    assert SqlResult(reference_sql="SELECT 1").ordered is False
+
+
+def test_row_order_can_be_required_in_a_suite_file() -> None:
+    data = valid_case()
+    data["check"]["ordered"] = True
+    assert Case.model_validate(data).check.ordered is True
+
+
 def test_unknown_check_kind_is_rejected() -> None:
     data = valid_case()
     data["check"]["kind"] = "regex"
