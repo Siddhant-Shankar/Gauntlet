@@ -265,18 +265,17 @@ ALL_KINDS: list[Outcome] = [
 
 
 def describe(outcome: Outcome) -> str:
-    # mypy fails this file if a kind is missing from the match.
-    match outcome:
-        case Passed():
-            return "pass"
-        case Failed(reason=reason):
-            return f"fail: {reason}"
-        case Errored(message=message):
-            return f"error: {message}"
-        case NeedsReview(reason=reason):
-            return f"review: {reason}"
-        case _:
-            assert_never(outcome)
+    # mypy fails this file if a kind is missing from the if chain.
+    if isinstance(outcome, Passed):
+        return "pass"
+    elif isinstance(outcome, Failed):
+        return f"fail: {outcome.reason}"
+    elif isinstance(outcome, Errored):
+        return f"error: {outcome.message}"
+    elif isinstance(outcome, NeedsReview):
+        return f"review: {outcome.reason}"
+    else:
+        assert_never(outcome)
 
 
 @pytest.mark.parametrize("outcome", ALL_KINDS)
