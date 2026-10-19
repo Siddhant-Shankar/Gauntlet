@@ -5,6 +5,7 @@ from gauntlet.models import (
     NeedsReview,
     Outcome,
     Passed,
+    Reviewed,
     SqlResult,
     Suite,
 )
@@ -21,7 +22,7 @@ SUITE = Suite(
 
 def test_report_shows_scores_and_every_problem() -> None:
     outcomes: dict[str, list[Outcome]] = {
-        "count_customers": [Passed(), Passed(), Passed()],
+        "count_customers": [Passed(), Reviewed(passed=True, note="right rows"), Passed()],
         "top_3_products": [
             NeedsReview(reason="no SQL in answer"),
             Failed(reason="right rows, wrong order"),
@@ -46,6 +47,9 @@ def test_report_shows_scores_and_every_problem() -> None:
             "",
             "Errored",
             "  top_3_products #3: TimeoutError: agent timed out",
+            "",
+            "Decided by a person",
+            "  count_customers #2: passed (right rows)",
         ]
     )
 

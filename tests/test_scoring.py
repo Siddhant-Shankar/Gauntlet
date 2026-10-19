@@ -1,12 +1,14 @@
 import pytest
 
-from gauntlet.models import CaseScore, Errored, Failed, NeedsReview, Outcome, Passed
+from gauntlet.models import CaseScore, Errored, Failed, NeedsReview, Outcome, Passed, Reviewed
 from gauntlet.scoring import score_case, score_suite
 
 PASS = Passed()
 FAIL = Failed(reason="rows differ")
 ERROR = Errored(message="timeout after 30s")
 REVIEW = NeedsReview(reason="no SQL in answer")
+REVIEWED_PASS = Reviewed(passed=True, note="2 is right")
+REVIEWED_FAIL = Reviewed(passed=False, note="wrong table")
 
 
 def test_passing_every_attempt_passes_all_and_some() -> None:
@@ -51,10 +53,21 @@ def test_every_kind_is_counted() -> None:
         failed=1,
         errored=1,
         needs_review=1,
+        reviewed=0,
         passes_all=False,
         passes_some=True,
         pass_rate=0.4,
     )
+
+
+def test_a_person_passing_an_attempt_counts_as_passed() -> None:
+    score = score_case("q", [PASS, REVIEWED_PASS])
+    assert (score.passed, score.reviewed, score.passes_all) == (2, 1, True)
+
+
+def test_a_person_failing_an_attempt_counts_as_failed() -> None:
+    score = score_case("q", [PASS, REVIEWED_FAIL])
+    assert (score.failed, score.reviewed, score.passes_all) == (1, 1, False)
 
 
 def test_a_single_attempt_can_pass_all() -> None:
