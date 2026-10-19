@@ -6,6 +6,7 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from gauntlet.models import (
+    Attempt,
     Case,
     Errored,
     Failed,
@@ -13,9 +14,11 @@ from gauntlet.models import (
     NeedsReview,
     Outcome,
     Passed,
+    Reviewed,
     RunConfig,
     SqlResult,
     Suite,
+    Verdict,
 )
 
 
@@ -218,27 +221,31 @@ def test_k_in_a_suite_file_is_rejected() -> None:
 # --- RunConfig ---
 
 
+VALID_CONFIG = {"k": 5, "db_path": "data/demo.db", "agent": "claude-sonnet-5-5"}
+
+
 def test_run_config_loads() -> None:
-    config = RunConfig.model_validate({"k": 5, "db_path": "data/demo.db"})
+    config = RunConfig.model_validate(VALID_CONFIG)
     assert config.k == 5
     assert config.db_path == Path("data/demo.db")
+    assert config.agent == "claude-sonnet-5-5"
 
 
 def test_run_config_survives_a_json_round_trip() -> None:
-    config = RunConfig(k=5, db_path=Path("data/demo.db"))
+    config = RunConfig(k=5, db_path=Path("data/demo.db"), agent="claude-sonnet-5-5")
     assert RunConfig.model_validate_json(config.model_dump_json()) == config
 
 
 @pytest.mark.parametrize("bad_k", [0, -1])
 def test_k_below_one_is_rejected(bad_k: int) -> None:
     with pytest.raises(ValidationError) as exc:
-        RunConfig.model_validate({"k": bad_k, "db_path": "data/demo.db"})
+        RunConfig.model_validate({**VALID_CONFIG, "k": bad_k})
     assert first_error_type(exc) == "greater_than_equal"
 
 
-@pytest.mark.parametrize("missing", ["k", "db_path"])
+@pytest.mark.parametrize("missing", ["k", "db_path", "agent"])
 def test_run_config_fields_are_required(missing: str) -> None:
-    data: dict[str, Any] = {"k": 5, "db_path": "data/demo.db"}
+    data: dict[str, Any] = dict(VALID_CONFIG)
     del data[missing]
     with pytest.raises(ValidationError) as exc:
         RunConfig.model_validate(data)
@@ -248,7 +255,7 @@ def test_run_config_fields_are_required(missing: str) -> None:
 @pytest.mark.parametrize("bad_k", [True, 2.0, "5"])
 def test_k_must_be_a_whole_number(bad_k: object) -> None:
     with pytest.raises(ValidationError) as exc:
-        RunConfig.model_validate({"k": bad_k, "db_path": "data/demo.db"})
+        RunConfig.model_validate({**VALID_CONFIG, "k": bad_k})
     assert first_error_type(exc) == "int_type"
 
 
@@ -261,6 +268,7 @@ ALL_KINDS: list[Outcome] = [
     Failed(reason="expected [(59,)], got [(58,)]"),
     Errored(message="timeout after 30s"),
     NeedsReview(reason="no SQL in answer"),
+    Reviewed(passed=True, note="2 is right"),
 ]
 
 
@@ -274,6 +282,8 @@ def describe(outcome: Outcome) -> str:
         return f"error: {outcome.message}"
     elif isinstance(outcome, NeedsReview):
         return f"review: {outcome.reason}"
+    elif isinstance(outcome, Reviewed):
+        return f"reviewed: {'passed' if outcome.passed else 'failed'} ({outcome.note})"
     else:
         assert_never(outcome)
 
@@ -298,6 +308,7 @@ def test_kind_is_filled_in_and_written_to_json() -> None:
         ('{"kind": "failed", "reason": "rows differ"}', Failed),
         ('{"kind": "errored", "message": "timeout"}', Errored),
         ('{"kind": "needs_review", "reason": "rows differ"}', NeedsReview),
+        ('{"kind": "reviewed", "passed": false, "note": "wrong table"}', Reviewed),
     ],
 )
 def test_kind_label_picks_the_class(raw: str, expected_type: type[object]) -> None:
@@ -313,6 +324,8 @@ def test_kind_label_picks_the_class(raw: str, expected_type: type[object]) -> No
         ('{"kind": "failed"}', "missing"),
         ('{"kind": "failed", "reason": ""}', "string_too_short"),
         ('{"kind": "errored", "message": ""}', "string_too_short"),
+        ('{"kind": "reviewed", "passed": true, "note": " "}', "string_too_short"),
+        ('{"kind": "reviewed", "note": "ok"}', "missing"),
     ],
 )
 def test_bad_outcome_json_is_rejected(raw: str, error_type: str) -> None:
@@ -333,4 +346,29 @@ def test_every_kind_is_handled() -> None:
         "fail: expected [(59,)], got [(58,)]",
         "error: timeout after 30s",
         "review: no SQL in answer",
+        "reviewed: passed (2 is right)",
     ]
+
+
+# --- Attempt and Verdict ---
+
+
+def test_attempt_survives_a_json_round_trip() -> None:
+    attempt = Attempt(number=2, reply="SELECT 1", outcome=Failed(reason="rows differ"))
+    assert Attempt.model_validate_json(attempt.model_dump_json()) == attempt
+
+
+def test_an_errored_attempt_has_no_reply() -> None:
+    assert Attempt(number=1, outcome=Errored(message="timeout")).reply is None
+
+
+def test_attempt_numbers_start_at_one() -> None:
+    with pytest.raises(ValidationError) as exc:
+        Attempt(number=0, outcome=Passed())
+    assert first_error_type(exc) == "greater_than_equal"
+
+
+def test_a_verdict_needs_a_note() -> None:
+    with pytest.raises(ValidationError) as exc:
+        Verdict(attempt=1, passed=True, note="  ")
+    assert first_error_type(exc) == "string_too_short"
