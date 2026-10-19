@@ -4,6 +4,7 @@ Every model here crosses a boundary (suite files on disk, Temporal payloads),
 so all of them inherit FrozenModel.
 """
 
+from pathlib import Path
 from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -63,3 +64,12 @@ class Suite(FrozenModel):
                 raise ValueError(f"duplicate case id: {case.id}")
             seen.add(case.id)
         return self
+
+
+class RunConfig(FrozenModel):
+    """Settings for one run, kept out of Suite so the same cases can run at any k."""
+
+    k: int = Field(ge=1)
+    # Where the SQL check finds the database: a fact about the machine running
+    # the check, not about the questions, so it lives here and not on Suite.
+    db_path: Path

@@ -1,10 +1,11 @@
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
-from gauntlet.models import Case, FrozenModel, SqlResult, Suite
+from gauntlet.models import Case, FrozenModel, RunConfig, SqlResult, Suite
 
 
 def first_error_type(exc: pytest.ExceptionInfo[ValidationError]) -> str:
@@ -171,3 +172,33 @@ def test_k_in_a_suite_file_is_rejected() -> None:
     with pytest.raises(ValidationError) as exc:
         Suite.model_validate(data)
     assert first_error_type(exc) == "extra_forbidden"
+
+
+# --- RunConfig ---
+
+
+def test_run_config_loads() -> None:
+    config = RunConfig.model_validate({"k": 5, "db_path": "data/demo.db"})
+    assert config.k == 5
+    assert config.db_path == Path("data/demo.db")
+
+
+def test_run_config_survives_a_json_round_trip() -> None:
+    config = RunConfig(k=5, db_path=Path("data/demo.db"))
+    assert RunConfig.model_validate_json(config.model_dump_json()) == config
+
+
+@pytest.mark.parametrize("bad_k", [0, -1])
+def test_k_below_one_is_rejected(bad_k: int) -> None:
+    with pytest.raises(ValidationError) as exc:
+        RunConfig.model_validate({"k": bad_k, "db_path": "data/demo.db"})
+    assert first_error_type(exc) == "greater_than_equal"
+
+
+@pytest.mark.parametrize("missing", ["k", "db_path"])
+def test_run_config_fields_are_required(missing: str) -> None:
+    data: dict[str, Any] = {"k": 5, "db_path": "data/demo.db"}
+    del data[missing]
+    with pytest.raises(ValidationError) as exc:
+        RunConfig.model_validate(data)
+    assert first_error_type(exc) == "missing"
