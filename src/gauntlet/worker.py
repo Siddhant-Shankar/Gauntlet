@@ -18,13 +18,16 @@ async def connect(address: str) -> Client:
 
 
 def build_worker(
-    client: Client, agent: Agent, executor: ThreadPoolExecutor, task_queue: str = TASK_QUEUE
+    client: Client,
+    agents: dict[str, Agent],
+    executor: ThreadPoolExecutor,
+    task_queue: str = TASK_QUEUE,
 ) -> Worker:
     return Worker(
         client,
         task_queue=task_queue,
         workflows=[RunWorkflow, CaseWorkflow],
-        activities=[load_schema, AgentActivities(agent).ask_agent, check_answer],
+        activities=[load_schema, AgentActivities(agents).ask_agent, check_answer],
         activity_executor=executor,
         workflow_runner=SANDBOX_RUNNER,
     )

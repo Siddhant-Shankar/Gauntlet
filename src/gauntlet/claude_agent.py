@@ -3,6 +3,7 @@
 from anthropic import Anthropic
 from anthropic.types import TextBlock
 
+MODELS = ("claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5")
 DEFAULT_MODEL = "claude-sonnet-5-5"
 REQUEST_TIMEOUT_SECONDS = 30.0
 INSTRUCTIONS = (

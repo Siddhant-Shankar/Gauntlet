@@ -22,15 +22,19 @@ def load_schema(db_path: Path) -> str:
 
 
 class AgentActivities:
-    """The agent activity, bound to whichever agent the worker was started with."""
+    """The agent activity, with every agent this worker can run, by name."""
 
-    def __init__(self, agent: Agent) -> None:
-        self._agent = agent
+    def __init__(self, agents: dict[str, Agent]) -> None:
+        self._agents = agents
 
     @activity.defn
-    def ask_agent(self, prompt: str, schema: str) -> str:
+    def ask_agent(self, agent_name: str, prompt: str, schema: str) -> str:
+        agent = self._agents.get(agent_name)
+        if agent is None:
+            message = f"no agent named {agent_name!r} on this worker"
+            raise ApplicationError(message, non_retryable=True)
         with ThreadPoolExecutor(max_workers=1) as pool:
-            call = pool.submit(self._agent.answer, prompt, schema)
+            call = pool.submit(agent.answer, prompt, schema)
             while not call.done():
                 activity.heartbeat()  # if this worker dies, the beats stop and Temporal retries
                 wait([call], timeout=HEARTBEAT_EVERY_SECONDS)
