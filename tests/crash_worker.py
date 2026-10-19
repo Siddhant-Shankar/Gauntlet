@@ -24,7 +24,7 @@ class SlowAgent:
 async def main(address: str, task_queue: str, answers: dict[str, str]) -> None:
     client = await connect(address)
     with ThreadPoolExecutor() as executor:
-        await build_worker(client, SlowAgent(answers), executor, task_queue).run()
+        await build_worker(client, {"slow": SlowAgent(answers)}, executor, task_queue).run()
 
 
 if __name__ == "__main__":

@@ -68,7 +68,7 @@ async def test_a_killed_worker_resumes_without_redoing_finished_attempts(
     try:
         handle = await client.start_workflow(
             RunWorkflow.run,
-            args=[SUITE, RunConfig(k=3, db_path=db_path)],
+            args=[SUITE, RunConfig(k=3, db_path=db_path, agent="slow")],
             id=run_id,
             task_queue=task_queue,
         )
@@ -79,13 +79,14 @@ async def test_a_killed_worker_resumes_without_redoing_finished_attempts(
         worker_a.kill()
         await worker_a.wait()
         workers.append(await start_worker(client, task_queue))
-        outcomes = await asyncio.wait_for(handle.result(), timeout=60)
+        results = await asyncio.wait_for(handle.result(), timeout=60)
     finally:
         for worker in workers:
             if worker.returncode is None:
                 worker.kill()
                 await worker.wait()
 
+    outcomes = {case_id: [a.outcome for a in attempts] for case_id, attempts in results.items()}
     assert outcomes == {case_id: [Passed()] * 3 for case_id in CASES}
     tries = [
         ask_agent_tries(await client.get_workflow_handle(f"{run_id}/{case_id}").fetch_history())

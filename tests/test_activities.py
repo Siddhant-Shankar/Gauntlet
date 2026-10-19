@@ -45,14 +45,14 @@ def test_a_missing_database_is_not_retried(tmp_path: Path) -> None:
 
 def test_ask_agent_returns_the_raw_reply() -> None:
     reply = f"```sql\n{USA_COUNT}\n```"
-    agent = AgentActivities(FakeAgent({"q": [reply]}))
-    assert ActivityEnvironment().run(agent.ask_agent, "q", "schema") == reply
+    agent = AgentActivities({"fake": FakeAgent({"q": [reply]})})
+    assert ActivityEnvironment().run(agent.ask_agent, "fake", "q", "schema") == reply
 
 
 def test_an_agent_error_is_not_retried() -> None:
-    agent = AgentActivities(FakeAgent({"q": [TimeoutError("agent timed out")]}))
+    agent = AgentActivities({"fake": FakeAgent({"q": [TimeoutError("agent timed out")]})})
     with pytest.raises(ApplicationError) as exc:
-        ActivityEnvironment().run(agent.ask_agent, "q", "schema")
+        ActivityEnvironment().run(agent.ask_agent, "fake", "q", "schema")
     assert exc.value.non_retryable
     assert str(exc.value) == "TimeoutError: agent timed out"
 
@@ -62,8 +62,17 @@ def test_ask_agent_heartbeats_while_the_agent_thinks(monkeypatch: pytest.MonkeyP
     env = ActivityEnvironment()
     beats: list[tuple[object, ...]] = []
     env.on_heartbeat = lambda *details: beats.append(details)
-    assert env.run(AgentActivities(SlowAgent()).ask_agent, "q", "schema") == "SELECT 1"
+    agent = AgentActivities({"slow": SlowAgent()})
+    assert env.run(agent.ask_agent, "slow", "q", "schema") == "SELECT 1"
     assert len(beats) >= 3
+
+
+def test_an_agent_the_worker_does_not_have_is_not_retried() -> None:
+    agent = AgentActivities({"fake": FakeAgent({"q": ["SELECT 1"]})})
+    with pytest.raises(ApplicationError) as exc:
+        ActivityEnvironment().run(agent.ask_agent, "claude-nope", "q", "schema")
+    assert exc.value.non_retryable
+    assert str(exc.value) == "no agent named 'claude-nope' on this worker"
 
 
 # --- check_answer ---
