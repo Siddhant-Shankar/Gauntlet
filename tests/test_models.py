@@ -162,7 +162,7 @@ def test_suite_with_duplicate_case_ids_is_rejected() -> None:
     with pytest.raises(ValidationError) as exc:
         Suite.model_validate(data)
     assert first_error_type(exc) == "value_error"
-    assert "duplicate case id: count_customers" in str(exc.value)
+    assert "case ids must be unique" in str(exc.value)
 
 
 def test_k_in_a_suite_file_is_rejected() -> None:
