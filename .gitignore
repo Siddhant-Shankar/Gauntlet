@@ -8,6 +8,7 @@ __pycache__/
 .env.*
 !.env.example
 results/
+CLAUDE.md
 
 # Personal prep notes, kept out of the repo
 private/
