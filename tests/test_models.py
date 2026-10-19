@@ -1,11 +1,22 @@
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, assert_never
 
 import pytest
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
-from gauntlet.models import Case, FrozenModel, RunConfig, SqlResult, Suite
+from gauntlet.models import (
+    Case,
+    Errored,
+    Failed,
+    FrozenModel,
+    NeedsReview,
+    Outcome,
+    Passed,
+    RunConfig,
+    SqlResult,
+    Suite,
+)
 
 
 def first_error_type(exc: pytest.ExceptionInfo[ValidationError]) -> str:
@@ -202,3 +213,88 @@ def test_run_config_fields_are_required(missing: str) -> None:
     with pytest.raises(ValidationError) as exc:
         RunConfig.model_validate(data)
     assert first_error_type(exc) == "missing"
+
+
+# --- Outcome ---
+
+outcomes: TypeAdapter[Outcome] = TypeAdapter(Outcome)
+
+ALL_KINDS: list[Outcome] = [
+    Passed(),
+    Failed(reason="expected [(59,)], got [(58,)]"),
+    Errored(message="timeout after 30s"),
+    NeedsReview(reason="no SQL in answer"),
+]
+
+
+def describe(outcome: Outcome) -> str:
+    # mypy fails this file if a kind is missing from the match.
+    match outcome:
+        case Passed():
+            return "pass"
+        case Failed(reason=reason):
+            return f"fail: {reason}"
+        case Errored(message=message):
+            return f"error: {message}"
+        case NeedsReview(reason=reason):
+            return f"review: {reason}"
+        case _:
+            assert_never(outcome)
+
+
+@pytest.mark.parametrize("outcome", ALL_KINDS)
+def test_outcome_survives_a_json_round_trip(outcome: Outcome) -> None:
+    loaded = outcomes.validate_json(outcomes.dump_json(outcome))
+    assert loaded == outcome
+    assert type(loaded) is type(outcome)
+
+
+def test_kind_is_filled_in_and_written_to_json() -> None:
+    failed = Failed(reason="rows differ")
+    assert failed.kind == "failed"
+    assert json.loads(failed.model_dump_json()) == {"kind": "failed", "reason": "rows differ"}
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected_type"),
+    [
+        ('{"kind": "passed"}', Passed),
+        ('{"kind": "failed", "reason": "rows differ"}', Failed),
+        ('{"kind": "errored", "message": "timeout"}', Errored),
+        ('{"kind": "needs_review", "reason": "rows differ"}', NeedsReview),
+    ],
+)
+def test_kind_label_picks_the_class(raw: str, expected_type: type[object]) -> None:
+    assert type(outcomes.validate_json(raw)) is expected_type
+
+
+@pytest.mark.parametrize(
+    ("raw", "error_type"),
+    [
+        ('{"kind": "maybe", "reason": "x"}', "union_tag_invalid"),
+        ('{"reason": "rows differ"}', "union_tag_not_found"),
+        ('{"kind": "passed", "reason": "rows differ"}', "extra_forbidden"),
+        ('{"kind": "failed"}', "missing"),
+        ('{"kind": "failed", "reason": ""}', "string_too_short"),
+        ('{"kind": "errored", "message": ""}', "string_too_short"),
+    ],
+)
+def test_bad_outcome_json_is_rejected(raw: str, error_type: str) -> None:
+    with pytest.raises(ValidationError) as exc:
+        outcomes.validate_json(raw)
+    assert first_error_type(exc) == error_type
+
+
+def test_wrong_kind_in_code_is_rejected() -> None:
+    with pytest.raises(ValidationError) as exc:
+        Failed(kind="passed", reason="x")  # type: ignore[arg-type]  # wrong on purpose
+    assert first_error_type(exc) == "literal_error"
+
+
+def test_every_kind_is_handled() -> None:
+    assert [describe(outcome) for outcome in ALL_KINDS] == [
+        "pass",
+        "fail: expected [(59,)], got [(58,)]",
+        "error: timeout after 30s",
+        "review: no SQL in answer",
+    ]

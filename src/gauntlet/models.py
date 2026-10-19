@@ -1,7 +1,7 @@
-"""Gauntlet's data models: test cases, suites and run settings."""
+"""Gauntlet's data models: test cases, suites, run settings and outcomes."""
 
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -54,3 +54,34 @@ class RunConfig(FrozenModel):
 
     k: int = Field(ge=1)
     db_path: Path
+
+
+class Passed(FrozenModel):
+    """The agent's rows matched the reference rows."""
+
+    kind: Literal["passed"] = "passed"
+
+
+class Failed(FrozenModel):
+    """The agent answered, and the answer was wrong."""
+
+    kind: Literal["failed"] = "failed"
+    reason: str = Field(min_length=1)
+
+
+class Errored(FrozenModel):
+    """No answer came back: the agent crashed or timed out."""
+
+    kind: Literal["errored"] = "errored"
+    message: str = Field(min_length=1)
+
+
+class NeedsReview(FrozenModel):
+    """No check could decide, so a person has to look."""
+
+    kind: Literal["needs_review"] = "needs_review"
+    reason: str = Field(min_length=1)
+
+
+# Pydantic reads "kind" to pick the class when loading an outcome from JSON.
+type Outcome = Annotated[Passed | Failed | Errored | NeedsReview, Field(discriminator="kind")]
