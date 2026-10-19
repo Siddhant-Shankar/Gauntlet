@@ -45,11 +45,11 @@ def read_schema(db_path: Path) -> str:
 
 def extract_sql(reply: str) -> str:
     """Return the SQL inside the reply's first ``` block, or the whole reply if it has none."""
-    _, fence, after = reply.partition(FENCE)
+    before, fence, after = reply.partition(FENCE)
     if not fence:
         return reply.strip()
     first_line, newline, rest = after.partition("\n")
     # The first line is the language tag, e.g. "sql", unless the whole block is one line.
     body = rest if newline else first_line
     sql, _, _ = body.partition(FENCE)
-    return sql.strip()
+    return sql.strip() or before.strip()  # a lone closing fence: the SQL came before it
