@@ -107,6 +107,26 @@ def test_empty_reference_sql_is_rejected() -> None:
     assert first_error_type(exc) == "string_too_short"
 
 
+@pytest.mark.parametrize("blank", ["   ", "\t\n"])
+def test_blank_text_is_rejected(blank: str) -> None:
+    data = valid_case()
+    data["prompt"] = blank
+    with pytest.raises(ValidationError) as exc:
+        Case.model_validate(data)
+    assert first_error_type(exc) == "string_too_short"
+    data = valid_case()
+    data["check"]["reference_sql"] = blank
+    with pytest.raises(ValidationError) as exc:
+        Case.model_validate(data)
+    assert first_error_type(exc) == "string_too_short"
+
+
+def test_surrounding_whitespace_is_trimmed() -> None:
+    data = valid_case()
+    data["id"] = "  count_customers  "
+    assert Case.model_validate(data).id == "count_customers"
+
+
 @pytest.mark.parametrize(
     "bad_id",
     ["count customers", "count\tcustomers", "count-customers", "2024_sales", "q1/count"],
@@ -223,6 +243,13 @@ def test_run_config_fields_are_required(missing: str) -> None:
     with pytest.raises(ValidationError) as exc:
         RunConfig.model_validate(data)
     assert first_error_type(exc) == "missing"
+
+
+@pytest.mark.parametrize("bad_k", [True, 2.0, "5"])
+def test_k_must_be_a_whole_number(bad_k: object) -> None:
+    with pytest.raises(ValidationError) as exc:
+        RunConfig.model_validate({"k": bad_k, "db_path": "data/demo.db"})
+    assert first_error_type(exc) == "int_type"
 
 
 # --- Outcome ---

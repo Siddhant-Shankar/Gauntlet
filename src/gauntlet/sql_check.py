@@ -8,7 +8,11 @@ from pathlib import Path
 from gauntlet.models import Case, Failed, NeedsReview, Outcome, Passed
 
 TIME_LIMIT_SECONDS = 5.0
+MAX_VALUE_BYTES = 1_000_000
+MAX_ROWS = 10_000
+MAX_RESULT_BYTES = 10_000_000
 PREVIEW_ROWS = 5
+PREVIEW_CHARS = 100
 
 # First words of SQL statements. An answer that starts with anything else is prose.
 SQL_FIRST_WORDS = frozenset(
@@ -23,6 +27,10 @@ class QueryTimeout(Exception):
     """A query ran longer than TIME_LIMIT_SECONDS."""
 
 
+class ResultTooLarge(Exception):
+    """A query returned more than MAX_ROWS rows or MAX_RESULT_BYTES of text and blobs."""
+
+
 def check_sql(case: Case, answer: str, db_path: Path) -> Outcome:
     """Judge the agent's SQL against the case's reference query."""
     if not _looks_like_sql(answer):
@@ -35,6 +43,8 @@ def check_sql(case: Case, answer: str, db_path: Path) -> Outcome:
         width, got = _run(answer, db_path)
     except QueryTimeout:
         return Failed(reason=f"query exceeded {TIME_LIMIT_SECONDS:g}s")
+    except ResultTooLarge:
+        return Failed(reason=f"result too large: over {MAX_ROWS} rows or {MAX_RESULT_BYTES} bytes")
     except sqlite3.Error as error:
         return Failed(reason=f"agent SQL failed: {error}")
 
@@ -52,18 +62,30 @@ def _run(sql: str, db_path: Path) -> tuple[int, list[Row]]:
     deadline = time.monotonic() + TIME_LIMIT_SECONDS
     conn = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)
     try:
+        conn.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, MAX_VALUE_BYTES)
         conn.set_authorizer(_deny_attach)
         conn.set_progress_handler(lambda: time.monotonic() > deadline, 10_000)
         try:
             cursor = conn.execute(sql)
-            rows: list[Row] = cursor.fetchall()
+            rows = _fetch_capped(cursor)
         except sqlite3.OperationalError as error:
-            if time.monotonic() > deadline:
+            if error.sqlite_errorcode == sqlite3.SQLITE_INTERRUPT:
                 raise QueryTimeout from error
             raise
         return len(cursor.description or ()), rows
     finally:
         conn.close()
+
+
+def _fetch_capped(cursor: sqlite3.Cursor) -> list[Row]:
+    rows: list[Row] = []
+    size = 0
+    for row in cursor:
+        rows.append(row)
+        size += sum(len(value) for value in row if isinstance(value, str | bytes))
+        if len(rows) > MAX_ROWS or size > MAX_RESULT_BYTES:
+            raise ResultTooLarge
+    return rows
 
 
 def _deny_attach(action: int, *_: str | None) -> int:
@@ -81,7 +103,11 @@ def _columns(count: int) -> str:
 
 
 def _preview(rows: list[Row]) -> str:
-    if len(rows) <= PREVIEW_ROWS:
-        return repr(rows)
-    shown = ", ".join(repr(row) for row in rows[:PREVIEW_ROWS])
-    return f"[{shown}, ...] ({len(rows)} rows)"
+    shown = ", ".join(_shorten(repr(row)) for row in rows[:PREVIEW_ROWS])
+    if len(rows) > PREVIEW_ROWS:
+        return f"[{shown}, ...] ({len(rows)} rows)"
+    return f"[{shown}]"
+
+
+def _shorten(text: str) -> str:
+    return text if len(text) <= PREVIEW_CHARS else text[:PREVIEW_CHARS] + "..."

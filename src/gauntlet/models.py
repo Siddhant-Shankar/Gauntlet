@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class FrozenModel(BaseModel):
     """Base for every model: can't be changed after creation, rejects unknown fields."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", str_strip_whitespace=True)
 
 
 class SqlResult(FrozenModel):
@@ -53,7 +53,7 @@ class Suite(FrozenModel):
 class RunConfig(FrozenModel):
     """Settings for one run: how many attempts per case, and which database."""
 
-    k: int = Field(ge=1)
+    k: int = Field(ge=1, strict=True)  # strict: rejects True and 2.0
     db_path: Path
 
 

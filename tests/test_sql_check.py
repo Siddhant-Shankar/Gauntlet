@@ -86,7 +86,26 @@ def test_required_order_fails_when_rows_are_reordered(db_path: Path) -> None:
 def test_duplicate_rows_are_counted(db_path: Path) -> None:
     answer = "SELECT country FROM customers"
     outcome = check_sql(make_case(COUNTRIES), answer, db_path)
-    assert isinstance(outcome, Failed)
+    assert reason_of(outcome).startswith("expected [")  # a row mismatch, not a column one
+
+
+def test_lowercase_sql_counts_as_sql(db_path: Path) -> None:
+    assert check_sql(make_case(COUNT), "select count(*) from customers", db_path) == Passed()
+
+
+def test_null_matches_null(db_path: Path) -> None:
+    assert check_sql(make_case("SELECT NULL"), "SELECT NULL", db_path) == Passed()
+
+
+def test_whole_number_and_float_with_the_same_value_match(db_path: Path) -> None:
+    # 4 == 4.0 in Python; only the SQL expression differs, so this is a pass by design.
+    answer = "SELECT CAST(COUNT(*) AS REAL) FROM customers"
+    assert check_sql(make_case(COUNT), answer, db_path) == Passed()
+
+
+def test_statement_with_no_columns_fails(db_path: Path) -> None:
+    outcome = check_sql(make_case(COUNT), "PRAGMA query_only = 1", db_path)
+    assert reason_of(outcome) == "expected 1 column, got 0"
 
 
 def test_extra_column_fails(db_path: Path) -> None:
@@ -164,3 +183,36 @@ def test_broken_reference_sql_stops_the_run(db_path: Path) -> None:
 def test_missing_database_stops_the_run(tmp_path: Path) -> None:
     with pytest.raises(sqlite3.OperationalError):
         check_sql(make_case(COUNT), COUNT, tmp_path / "nope.db")
+
+
+# --- result size limits ---
+
+
+def test_oversized_value_fails(db_path: Path) -> None:
+    outcome = check_sql(make_case(COUNT), "SELECT zeroblob(2000000)", db_path)
+    assert reason_of(outcome) == "agent SQL failed: string or blob too big"
+
+
+def test_too_many_rows_fails(db_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sql_check, "MAX_ROWS", 3)
+    outcome = check_sql(make_case(COUNT), "SELECT name FROM customers", db_path)
+    assert reason_of(outcome).startswith("result too large")
+
+
+def test_too_much_text_fails(db_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sql_check, "MAX_RESULT_BYTES", 10)
+    outcome = check_sql(make_case(COUNT), "SELECT name FROM customers", db_path)
+    assert reason_of(outcome).startswith("result too large")
+
+
+def test_oversized_reference_result_stops_the_run(
+    db_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sql_check, "MAX_ROWS", 3)
+    with pytest.raises(sql_check.ResultTooLarge):
+        check_sql(make_case("SELECT name FROM customers"), COUNT, db_path)
+
+
+def test_long_values_are_cut_short_in_the_reason(db_path: Path) -> None:
+    outcome = check_sql(make_case("SELECT 1"), "SELECT zeroblob(500000)", db_path)
+    assert len(reason_of(outcome)) < 200
