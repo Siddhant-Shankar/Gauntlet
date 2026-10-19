@@ -4,7 +4,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from gauntlet.models import Case, FrozenModel, SqlResult
+from gauntlet.models import Case, FrozenModel, SqlResult, Suite
 
 
 def first_error_type(exc: pytest.ExceptionInfo[ValidationError]) -> str:
@@ -118,3 +118,56 @@ def test_case_is_frozen() -> None:
     with pytest.raises(ValidationError) as exc:
         case.prompt = "changed"  # type: ignore[misc]  # assigning on purpose to prove it's frozen
     assert first_error_type(exc) == "frozen_instance"
+
+
+# --- Suite ---
+
+
+def valid_suite() -> dict[str, Any]:
+    return {"name": "demo_sql", "cases": [valid_case("count_customers"), valid_case("count_again")]}
+
+
+def test_suite_loads_from_json_with_cases_as_a_tuple() -> None:
+    suite = Suite.model_validate_json(json.dumps(valid_suite()))
+    assert suite.name == "demo_sql"
+    assert isinstance(suite.cases, tuple)
+    assert [case.id for case in suite.cases] == ["count_customers", "count_again"]
+
+
+def test_suite_survives_a_json_round_trip() -> None:
+    suite = Suite.model_validate(valid_suite())
+    assert Suite.model_validate_json(suite.model_dump_json()) == suite
+
+
+def test_suite_with_no_cases_is_rejected() -> None:
+    data = valid_suite()
+    data["cases"] = []
+    with pytest.raises(ValidationError) as exc:
+        Suite.model_validate(data)
+    assert first_error_type(exc) == "too_short"
+
+
+def test_suite_with_empty_name_is_rejected() -> None:
+    data = valid_suite()
+    data["name"] = ""
+    with pytest.raises(ValidationError) as exc:
+        Suite.model_validate(data)
+    assert first_error_type(exc) == "string_too_short"
+
+
+def test_suite_with_duplicate_case_ids_is_rejected() -> None:
+    data = valid_suite()
+    data["cases"] = [valid_case("count_customers"), valid_case("count_customers")]
+    with pytest.raises(ValidationError) as exc:
+        Suite.model_validate(data)
+    assert first_error_type(exc) == "value_error"
+    assert "duplicate case id: count_customers" in str(exc.value)
+
+
+def test_k_in_a_suite_file_is_rejected() -> None:
+    # k belongs to RunConfig; putting it in the suite file must fail, not be ignored.
+    data = valid_suite()
+    data["k"] = 5
+    with pytest.raises(ValidationError) as exc:
+        Suite.model_validate(data)
+    assert first_error_type(exc) == "extra_forbidden"

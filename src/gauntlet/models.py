@@ -4,9 +4,9 @@ Every model here crosses a boundary (suite files on disk, Temporal payloads),
 so all of them inherit FrozenModel.
 """
 
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class FrozenModel(BaseModel):
@@ -44,3 +44,22 @@ class Case(FrozenModel):
         if not value.isidentifier():
             raise ValueError("case id must look like a name, e.g. count_customers")
         return value
+
+
+class Suite(FrozenModel):
+    """A named list of cases that run together. This is what a suite file holds."""
+
+    name: str = Field(min_length=1)
+    # A tuple, not a list: frozen only blocks reassigning a field, so a list
+    # field could still be appended to.
+    cases: tuple[Case, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _unique_case_ids(self) -> Self:
+        # Two cases sharing an id would have their results merged in reports.
+        seen: set[str] = set()
+        for case in self.cases:
+            if case.id in seen:
+                raise ValueError(f"duplicate case id: {case.id}")
+            seen.add(case.id)
+        return self
