@@ -38,11 +38,11 @@ async def test_run_returns_the_report(client: Client, db_path: Path) -> None:
     task_queue = f"test-{uuid4()}"
     agent = FakeAgent({"How many?": [count, "SELECT 1"]})
     with ThreadPoolExecutor() as executor:
-        async with build_worker(client, agent, executor, task_queue):
+        async with build_worker(client, {"fake": agent}, executor, task_queue):
             report = await run_suite(
                 client.service_client.config.target_host,
                 suite,
-                RunConfig(k=2, db_path=db_path),
+                RunConfig(k=2, db_path=db_path, agent="fake"),
                 run_id=f"run-{uuid4()}",
                 task_queue=task_queue,
             )
