@@ -5,16 +5,17 @@ import asyncio
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
-from datetime import UTC, datetime
 from pathlib import Path
 
+import uvicorn
 from anthropic import Anthropic
 
 from gauntlet.agent import Agent
 from gauntlet.claude_agent import DEFAULT_MODEL, MODELS, REQUEST_TIMEOUT_SECONDS, ClaudeAgent
 from gauntlet.models import RunConfig, Suite
 from gauntlet.report import format_report
-from gauntlet.runs import run_results, start_run
+from gauntlet.runs import new_run_id, run_results, start_run
+from gauntlet.web import create_app
 from gauntlet.worker import TASK_QUEUE, build_worker, connect
 
 DEFAULT_ADDRESS = "localhost:7233"
@@ -32,7 +33,10 @@ async def run_worker(address: str) -> None:
     agents: dict[str, Agent] = {model: ClaudeAgent(anthropic, model) for model in MODELS}
     with ThreadPoolExecutor() as executor:
         worker = build_worker(client, agents, executor)
-        print(f"Worker ready on task queue '{TASK_QUEUE}' for {', '.join(MODELS)}. Ctrl+C to stop.")
+        print(
+            f"Worker ready on task queue '{TASK_QUEUE}' for {', '.join(MODELS)}. Ctrl+C to stop.",
+            flush=True,
+        )
         await worker.run()
 
 
@@ -56,9 +60,12 @@ def main(argv: list[str] | None = None) -> None:
         suite = Suite.model_validate_json(args.suite.read_text(encoding="utf-8"))
         # An absolute path, because the workers may run in another folder or machine.
         config = RunConfig(k=args.k, db_path=args.db.resolve(), agent=args.agent)
-        run_id = f"{suite.name}-{args.agent}-{datetime.now(UTC):%Y%m%d-%H%M%S}"
+        run_id = new_run_id(suite.name, args.agent)
         print(f"Started {run_id}; waiting for workers...", flush=True)
         print(asyncio.run(run_suite(args.address, suite, config, run_id)))
+    elif args.command == "web":
+        app = create_app(args.address, args.suites, args.db.resolve())
+        uvicorn.run(app, host=args.host, port=args.port)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -77,4 +84,10 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--db", type=Path, required=True)
     run.add_argument("-k", type=int, default=5)
     run.add_argument("--agent", choices=MODELS, default=DEFAULT_MODEL)
+
+    web = commands.add_parser("web", help="serve the web page: start, watch and review runs")
+    web.add_argument("--suites", type=Path, default=Path("demo"), help="folder of suite files")
+    web.add_argument("--db", type=Path, default=Path("demo/shop.db"))
+    web.add_argument("--host", default="127.0.0.1")
+    web.add_argument("--port", type=int, default=8000)
     return parser
