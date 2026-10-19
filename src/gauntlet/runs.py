@@ -1,7 +1,7 @@
 """Start, read and review runs: what the CLI and the web page both need from Temporal."""
 
 import asyncio
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from temporalio.client import Client, WorkflowExecutionStatus
 from temporalio.service import RPCError, RPCStatusCode
@@ -21,6 +21,11 @@ from gauntlet.worker import TASK_QUEUE
 from gauntlet.workflows import CaseWorkflow, RunWorkflow
 
 QUERY_TIMEOUT = timedelta(seconds=2)  # a query waits for a worker; don't wait long for one
+UPDATE_TIMEOUT = timedelta(seconds=10)
+
+
+def new_run_id(suite_name: str, agent: str) -> str:
+    return f"{suite_name}-{agent}-{datetime.now(UTC):%Y%m%d-%H%M%S}"
 
 
 async def start_run(
@@ -66,7 +71,7 @@ async def load_run(client: Client, run_id: str) -> RunView:
 
 async def review(client: Client, run_id: str, case_id: str, verdict: Verdict) -> None:
     handle = client.get_workflow_handle(f"{run_id}/{case_id}")
-    await handle.execute_update(CaseWorkflow.review, verdict)
+    await handle.execute_update(CaseWorkflow.review, verdict, rpc_timeout=UPDATE_TIMEOUT)
 
 
 async def _load_case(client: Client, run_id: str, case: Case, k: int) -> CaseView:
