@@ -86,3 +86,25 @@ class NeedsReview(FrozenModel):
 
 # Pydantic reads "kind" to pick the class when loading an outcome from JSON.
 type Outcome = Annotated[Passed | Failed | Errored | NeedsReview, Field(discriminator="kind")]
+
+
+class CaseScore(FrozenModel):
+    """How one case did across its k attempts. Anything but Passed counts as not passed."""
+
+    case_id: str
+    k: int
+    passed: int
+    failed: int
+    errored: int
+    needs_review: int
+    passes_all: bool  # pass^k: every attempt passed
+    passes_some: bool  # pass@k: at least one attempt passed
+    pass_rate: float
+
+
+class SuiteScore(FrozenModel):
+    """Every case's score, plus how many cases passed all and passed some attempts."""
+
+    cases: tuple[CaseScore, ...]
+    passes_all: int
+    passes_some: int
