@@ -9,6 +9,7 @@ from gauntlet.models import (
     NeedsReview,
     Outcome,
     Passed,
+    Reviewed,
     SuiteScore,
 )
 
@@ -17,7 +18,7 @@ def score_case(case_id: str, outcomes: list[Outcome]) -> CaseScore:
     if not outcomes:
         raise ValueError(f"no outcomes to score for case {case_id}")
 
-    passed = failed = errored = needs_review = 0
+    passed = failed = errored = needs_review = reviewed = 0
     for outcome in outcomes:
         if isinstance(outcome, Passed):
             passed += 1
@@ -27,6 +28,12 @@ def score_case(case_id: str, outcomes: list[Outcome]) -> CaseScore:
             errored += 1
         elif isinstance(outcome, NeedsReview):
             needs_review += 1
+        elif isinstance(outcome, Reviewed):
+            reviewed += 1
+            if outcome.passed:
+                passed += 1
+            else:
+                failed += 1
         else:
             assert_never(outcome)
 
@@ -38,6 +45,7 @@ def score_case(case_id: str, outcomes: list[Outcome]) -> CaseScore:
         failed=failed,
         errored=errored,
         needs_review=needs_review,
+        reviewed=reviewed,
         passes_all=passed == k,
         passes_some=passed > 0,
         pass_rate=passed / k,

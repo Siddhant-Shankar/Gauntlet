@@ -2,7 +2,7 @@
 
 from typing import assert_never
 
-from gauntlet.models import Errored, Failed, NeedsReview, Outcome, Passed, Suite
+from gauntlet.models import Errored, Failed, NeedsReview, Outcome, Passed, Reviewed, Suite
 from gauntlet.scoring import score_suite
 
 
@@ -27,7 +27,12 @@ def format_report(suite: Suite, k: int, outcomes_by_case: dict[str, list[Outcome
         f"pass@{k}: {score.passes_some} of {total} cases",
     ]
 
-    problems: dict[str, list[str]] = {"Needs review": [], "Failed": [], "Errored": []}
+    problems: dict[str, list[str]] = {
+        "Needs review": [],
+        "Failed": [],
+        "Errored": [],
+        "Decided by a person": [],
+    }
     for case_id, outcomes in outcomes_by_case.items():
         for attempt, outcome in enumerate(outcomes, start=1):
             problem = _problem(outcome)
@@ -49,8 +54,14 @@ def _problem(outcome: Outcome) -> tuple[str, str] | None:
         return "Failed", outcome.reason
     elif isinstance(outcome, Errored):
         return "Errored", outcome.message
+    elif isinstance(outcome, Reviewed):
+        return "Decided by a person", f"{_verdict(outcome.passed)} ({outcome.note})"
     else:
         assert_never(outcome)
+
+
+def _verdict(passed: bool) -> str:
+    return "passed" if passed else "failed"
 
 
 def _yes(value: bool) -> str:
