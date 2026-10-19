@@ -1,5 +1,6 @@
-"""Gauntlet's data models: test cases, suites, run settings and outcomes."""
+"""Gauntlet's data models: test cases, suites, run settings, outcomes and the web views."""
 
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -51,10 +52,11 @@ class Suite(FrozenModel):
 
 
 class RunConfig(FrozenModel):
-    """Settings for one run: how many attempts per case, and which database."""
+    """Settings for one run: how many attempts per case, which database, which agent."""
 
     k: int = Field(ge=1, strict=True)  # strict: rejects True and 2.0
     db_path: Path
+    agent: str = Field(min_length=1)
 
 
 class Passed(FrozenModel):
@@ -84,12 +86,38 @@ class NeedsReview(FrozenModel):
     reason: str = Field(min_length=1)
 
 
+class Reviewed(FrozenModel):
+    """A person decided an attempt that no check could."""
+
+    kind: Literal["reviewed"] = "reviewed"
+    passed: bool
+    note: str = Field(min_length=1)
+
+
 # Pydantic reads "kind" to pick the class when loading an outcome from JSON.
-type Outcome = Annotated[Passed | Failed | Errored | NeedsReview, Field(discriminator="kind")]
+type Outcome = Annotated[
+    Passed | Failed | Errored | NeedsReview | Reviewed, Field(discriminator="kind")
+]
+
+
+class Attempt(FrozenModel):
+    """One attempt at a case: the agent's raw reply and how it was judged."""
+
+    number: int = Field(ge=1)
+    reply: str | None = None  # None when the agent errored
+    outcome: Outcome
+
+
+class Verdict(FrozenModel):
+    """A person's decision on one attempt that needs review."""
+
+    attempt: int = Field(ge=1)
+    passed: bool
+    note: str = Field(min_length=1)
 
 
 class CaseScore(FrozenModel):
-    """How one case did across its k attempts. Anything but Passed counts as not passed."""
+    """How one case did across its k attempts. A person's verdict counts like a check's."""
 
     case_id: str
     k: int
@@ -97,6 +125,7 @@ class CaseScore(FrozenModel):
     failed: int
     errored: int
     needs_review: int
+    reviewed: int  # how many of passed and failed a person decided
     passes_all: bool  # pass^k: every attempt passed
     passes_some: bool  # pass@k: at least one attempt passed
     pass_rate: float
@@ -108,3 +137,37 @@ class SuiteScore(FrozenModel):
     cases: tuple[CaseScore, ...]
     passes_all: int
     passes_some: int
+
+
+class StartRequest(FrozenModel):
+    """What the web page sends to start runs: one run per chosen agent."""
+
+    suite: str = Field(min_length=1)
+    k: int = Field(ge=1, strict=True)
+    agents: tuple[str, ...] = Field(min_length=1)
+
+
+class RunSummary(FrozenModel):
+    """One line in the list of recent runs."""
+
+    run_id: str
+    status: str
+    started: datetime
+
+
+class CaseView(FrozenModel):
+    """One case of a run as the web page shows it."""
+
+    case: Case
+    attempts: tuple[Attempt, ...] | None  # None while no worker is up to answer
+    score: CaseScore | None  # None until all k attempts are in
+
+
+class RunView(FrozenModel):
+    """A run as the web page shows it: its settings, its status and every case so far."""
+
+    run_id: str
+    status: str
+    suite: Suite
+    config: RunConfig
+    cases: tuple[CaseView, ...]
