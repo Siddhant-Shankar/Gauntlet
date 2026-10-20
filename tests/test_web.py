@@ -49,7 +49,9 @@ async def site(client: Client, tmp_path_factory: pytest.TempPathFactory) -> Asyn
     db = tmp_path_factory.mktemp("web") / "shop.db"
     build_db(DEMO / "shop.sql", db)
     address = client.service_client.config.target_host
-    app = create_app(address, DEMO, db, task_queue="web-test", agents=("fake",))
+    app = create_app(
+        address, DEMO, db, task_queue="web-test", agents=("fake",), default_agent="fake"
+    )
     port = free_port()
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
     serving = asyncio.create_task(server.serve())
@@ -104,7 +106,7 @@ async def test_the_pages_are_served(site: int) -> None:
 async def test_the_options_list_the_suites_and_agents(site: int) -> None:
     assert await call(site, "GET", "/api/options") == (
         200,
-        {"suites": ["shop"], "agents": ["fake"]},
+        {"suites": ["shop"], "agents": ["fake"], "default_agent": "fake"},
     )
 
 
