@@ -7,6 +7,7 @@ __pycache__/
 .env
 results/
 demo/*.db
+temporal.db*
 CLAUDE.md
 
 # Personal prep notes, kept out of the repo
