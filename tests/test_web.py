@@ -114,6 +114,7 @@ async def test_the_options_list_the_suites_and_agents(site: int) -> None:
         ("POST", "/api/runs", {"suite": "nope", "k": 1, "agents": ["fake"]}, 404),
         ("POST", "/api/runs", {"suite": "shop", "k": 1, "agents": ["gpt"]}, 400),
         ("POST", "/api/runs", {"suite": "shop", "k": 0, "agents": ["fake"]}, 422),
+        ("POST", "/api/runs", {"suite": "shop", "k": 21, "agents": ["fake"]}, 422),
         ("GET", "/api/runs/no-such-run", None, 404),
         (
             "POST",
