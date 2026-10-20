@@ -38,9 +38,9 @@ def check_sql(case: Case, answer: str, db_path: Path) -> Outcome:
 
     # A failing reference query is a bug in the suite, so it raises
     # instead of becoming an Outcome that counts against the agent.
-    expected_width, expected = _run(case.check.reference_sql, db_path)
+    expected_column_count, expected = _run(case.check.reference_sql, db_path)
     try:
-        width, got = _run(answer, db_path)
+        column_count, got = _run(answer, db_path)
     except QueryTimeout:
         return Failed(reason=f"query exceeded {TIME_LIMIT_SECONDS:g}s")
     except ResultTooLarge:
@@ -48,8 +48,8 @@ def check_sql(case: Case, answer: str, db_path: Path) -> Outcome:
     except sqlite3.Error as error:
         return Failed(reason=f"agent SQL failed: {error}")
 
-    if width != expected_width:
-        return Failed(reason=f"expected {_columns(expected_width)}, got {width}")
+    if column_count != expected_column_count:
+        return Failed(reason=f"expected {_columns(expected_column_count)}, got {column_count}")
     if Counter(got) != Counter(expected):
         return Failed(reason=f"expected {_preview(expected)}, got {_preview(got)}")
     if case.check.ordered and got != expected:
