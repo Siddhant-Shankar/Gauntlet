@@ -127,8 +127,8 @@ function caseRow(caseView, k) {
 
 function statTiles(t, k) {
   return [
-    statTile(`pass^${k}`, t.passesAll, t.total, `cases where all ${k} attempts passed`, "pass"),
-    statTile(`pass@${k}`, t.passesSome, t.total, `cases where at least 1 of ${k} passed`, "pass"),
+    statTile(`pass^${k}`, t.passesAll, t.total, "cases where every attempt passed", "pass"),
+    statTile(`pass@${k}`, t.passesSome, t.total, "cases where at least one attempt passed", "pass"),
     statTile("Flaky", t.flaky, t.total, "passed sometimes, not always", "flaky"),
     statTile("Finished", t.finished, t.total, "cases with every attempt in"),
   ];
