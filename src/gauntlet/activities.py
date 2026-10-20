@@ -18,7 +18,7 @@ def load_schema(db_path: Path) -> str:
     try:
         return read_schema(db_path)
     except Exception as error:
-        raise _final(error) from error
+        raise _not_retried(error) from error
 
 
 class AgentActivities:
@@ -41,7 +41,7 @@ class AgentActivities:
         try:
             return call.result()
         except Exception as error:
-            raise _final(error) from error  # the agent's own failure is this attempt's result
+            raise _not_retried(error) from error  # the agent's own failure is this attempt's result
 
 
 @activity.defn
@@ -49,9 +49,9 @@ def check_answer(case: Case, reply: str, db_path: Path) -> Outcome:
     try:
         return check_sql(case, extract_sql(reply), db_path)
     except Exception as error:
-        raise _final(error) from error  # a broken reference query: a retry won't fix it
+        raise _not_retried(error) from error  # a broken reference query: a retry won't fix it
 
 
-def _final(error: Exception) -> ApplicationError:
+def _not_retried(error: Exception) -> ApplicationError:
     """Wrap an error so Temporal won't retry it; only timeouts are retried."""
     return ApplicationError(f"{type(error).__name__}: {error}", non_retryable=True)
