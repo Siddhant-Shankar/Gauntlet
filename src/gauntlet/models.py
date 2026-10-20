@@ -128,7 +128,6 @@ class CaseScore(FrozenModel):
     reviewed: int  # how many of passed and failed a person decided
     passes_all: bool  # pass^k: every attempt passed
     passes_some: bool  # pass@k: at least one attempt passed
-    pass_rate: float
 
 
 class SuiteScore(FrozenModel):

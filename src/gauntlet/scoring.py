@@ -48,7 +48,6 @@ def score_case(case_id: str, outcomes: list[Outcome]) -> CaseScore:
         reviewed=reviewed,
         passes_all=passed == k,
         passes_some=passed > 0,
-        pass_rate=passed / k,
     )
 
 
