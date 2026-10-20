@@ -143,7 +143,7 @@ class StartRequest(FrozenModel):
     """What the web page sends to start runs: one run per chosen agent."""
 
     suite: str = Field(min_length=1)
-    k: int = Field(ge=1, strict=True)
+    k: int = Field(ge=1, le=20, strict=True)  # each attempt is a paid API call
     agents: tuple[str, ...] = Field(min_length=1)
 
 
