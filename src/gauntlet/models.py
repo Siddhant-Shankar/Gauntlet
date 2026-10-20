@@ -139,6 +139,14 @@ class SuiteScore(FrozenModel):
     passes_some: int
 
 
+class Options(FrozenModel):
+    """What the start page can offer: the suites, the agents and which agent to tick first."""
+
+    suites: tuple[str, ...]
+    agents: tuple[str, ...]
+    default_agent: str
+
+
 class StartRequest(FrozenModel):
     """What the web page sends to start runs: one run per chosen agent."""
 

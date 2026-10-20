@@ -15,8 +15,8 @@ from temporalio.client import (
 from temporalio.exceptions import WorkflowAlreadyStartedError
 from temporalio.service import RPCError, RPCStatusCode
 
-from gauntlet.claude_agent import MODELS
-from gauntlet.models import RunConfig, RunSummary, RunView, StartRequest, Suite, Verdict
+from gauntlet.claude_agent import DEFAULT_MODEL, MODELS
+from gauntlet.models import Options, RunConfig, RunSummary, RunView, StartRequest, Suite, Verdict
 from gauntlet.runs import load_run, new_run_id, recent_runs, review, start_run
 from gauntlet.worker import TASK_QUEUE, connect
 
@@ -29,6 +29,7 @@ def create_app(
     db_path: Path,
     task_queue: str = TASK_QUEUE,
     agents: tuple[str, ...] = MODELS,
+    default_agent: str = DEFAULT_MODEL,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -61,8 +62,8 @@ def create_app(
         return FileResponse(STATIC / "compare.html")
 
     @app.get("/api/options")
-    async def options() -> dict[str, list[str]]:
-        return {"suites": sorted(suites()), "agents": list(agents)}
+    async def options() -> Options:
+        return Options(suites=tuple(sorted(suites())), agents=agents, default_agent=default_agent)
 
     @app.get("/api/runs")
     async def list_runs(request: Request) -> list[RunSummary]:

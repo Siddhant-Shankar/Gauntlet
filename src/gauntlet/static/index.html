@@ -80,7 +80,7 @@ async function loadOptions() {
     ...options.suites.map((name) => el("option", { value: name }, name)),
   );
   document.getElementById("agents").replaceChildren(
-    ...options.agents.map((name, i) => agentOption(name, i === 1)),
+    ...options.agents.map((name) => agentOption(name, name === options.default_agent)),
   );
 }
 
