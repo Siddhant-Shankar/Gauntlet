@@ -7,39 +7,54 @@
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
+<header class="topbar">
+  <a class="wordmark" href="/">Gauntlet</a>
+  <nav><a href="/">Runs</a><a href="/docs">API</a></nav>
+</header>
 <main>
-  <p><a href="/">← All runs</a></p>
-  <h1>Compare runs</h1>
-  <p class="muted">One column per run. Each cell is how many of the k attempts passed.</p>
+  <div class="page-head">
+    <h1>Compare runs</h1>
+    <p class="muted">One column per run, one row per case. Each cell is how many of the k attempts passed.</p>
+  </div>
   <p id="error" class="error" role="alert"></p>
-  <section class="card table-box"><table id="table"></table></section>
+  <section class="card">
+    <div id="legend"></div>
+    <div class="table-box"><table id="table" class="compare"></table></div>
+  </section>
 </main>
 <script src="/static/app.js"></script>
 <script>
 const runIds = (new URLSearchParams(location.search).get("runs") || "")
   .split(",").filter(Boolean).map(decodeURIComponent);
 
+function runHeader(view) {
+  return el("th", {},
+    el("a", { href: `/runs/${encodeURIComponent(view.run_id)}` },
+      el("strong", {}, agentLabel(view.config.agent)),
+      el("span", { class: "muted small" }, `k = ${view.config.k}`),
+      statusChip(view.status)));
+}
+
+function totalRow(label, pick) {
+  return (views) => el("tr", {}, el("th", {}, label), views.map((view) => {
+    const t = totals(view);
+    return el("th", {}, `${pick(t)} / ${t.total}`, meter(pick(t), t.total, "pass"));
+  }));
+}
+
+const passAllRow = totalRow("pass^k: every attempt passed", (t) => t.passesAll);
+const passSomeRow = totalRow("pass@k: some attempt passed", (t) => t.passesSome);
+
 function render(views) {
   const caseIds = views.length ? views[0].cases.map((c) => c.case.id) : [];
-  const header = el("tr", {}, el("th", {}, "case"),
-    views.map((v) => el("th", {}, el("a", { href: `/runs/${encodeURIComponent(v.run_id)}` },
-      `${v.config.agent} (k = ${v.config.k})`))));
-  const rows = caseIds.map((id) => el("tr", {}, el("td", {}, id), views.map((v) => {
-    const found = v.cases.find((c) => c.case.id === id);
-    if (!found || !found.score) return el("td", { class: "muted" }, "running");
-    const s = found.score;
-    return el("td", { class: s.passes_all ? "cell-pass" : "cell-fail" }, `${s.passed}/${s.k}`);
+  const rows = caseIds.map((id) => el("tr", {}, el("td", {}, id), views.map((view) => {
+    const found = view.cases.find((c) => c.case.id === id);
+    return el("td", {}, found ? scoreBadge(found) : "");
   })));
-  const totalRow = (label, pick) => el("tr", {}, el("th", {}, label), views.map((v) => {
-    const t = totals(v);
-    return el("th", {}, `${pick(t)} of ${t.total}`);
-  }));
   document.getElementById("table").replaceChildren(
-    el("thead", {}, header),
+    el("thead", {}, el("tr", {}, el("th", {}, "Case"), views.map(runHeader))),
     el("tbody", {}, rows),
-    el("tfoot", {},
-      totalRow("pass^k: every attempt passed", (t) => t.passesAll),
-      totalRow("pass@k: some attempt passed", (t) => t.passesSome)),
+    el("tfoot", {}, passAllRow(views), passSomeRow(views)),
   );
 }
 
@@ -57,6 +72,7 @@ async function refresh() {
   }
 }
 
+document.getElementById("legend").replaceChildren(scoreLegend());
 refresh();
 </script>
 </body>

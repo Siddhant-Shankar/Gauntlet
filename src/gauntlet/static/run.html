@@ -7,24 +7,41 @@
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
+<header class="topbar">
+  <a class="wordmark" href="/">Gauntlet</a>
+  <nav><a href="/">Runs</a><a href="/docs">API</a></nav>
+</header>
 <main>
-  <p><a href="/">← All runs</a></p>
-  <h1 id="title">Run</h1>
-  <p id="summary" class="muted"></p>
+  <div class="page-head">
+    <div class="title-row"><h1 id="title">Run</h1><span id="status"></span></div>
+    <p id="summary" class="muted"></p>
+  </div>
   <p id="banner" class="banner" hidden></p>
-  <div id="cases"></div>
+  <div id="stats" class="stats"></div>
+  <section class="cases">
+    <div class="cases-head">
+      <div class="card-head">
+        <h2>Cases</h2>
+        <span class="muted small">One square per attempt. Click a case to see the question and every answer.</span>
+      </div>
+      <div id="legend"></div>
+    </div>
+    <div id="cases"></div>
+  </section>
 </main>
 <script src="/static/app.js"></script>
 <script>
 const runId = decodeURIComponent(location.pathname.split("/").pop());
 const runPath = `/api/runs/${encodeURIComponent(runId)}`;
 const drafts = new Map(); // review notes typed but not sent yet, so a refresh never loses them
+const opened = new Set(); // cases the reader has opened, kept open across refreshes
 let lastJson = "";
 let timer;
 
-function showBanner(text) {
+function showBanner(text, style = "") {
   const banner = document.getElementById("banner");
   banner.textContent = text;
+  banner.className = `banner ${style}`;
   banner.hidden = !text;
 }
 
@@ -52,55 +69,103 @@ function reviewForm(caseId, attempt) {
   const errorBox = el("p", { class: "error", role: "alert" });
   const note = el("textarea", {
     "aria-label": `note for ${caseId} attempt ${attempt.number}`,
-    placeholder: "Why is this right or wrong?",
+    placeholder: "No check could decide this one. Is the answer right? Say why.",
     oninput: (event) => drafts.set(key, event.target.value),
   });
   note.value = drafts.get(key) || "";
-  return el("div", { class: "review" },
+  return el("div", { class: "review-form" },
     note,
     el("div", { class: "buttons" },
-      el("button", { type: "button", onclick: () => sendReview(caseId, attempt.number, true, errorBox) }, "Pass"),
-      el("button", { type: "button", class: "secondary", onclick: () => sendReview(caseId, attempt.number, false, errorBox) }, "Fail"),
+      el("button", { type: "button", class: "btn", onclick: () => sendReview(caseId, attempt.number, true, errorBox) }, "Mark passed"),
+      el("button", { type: "button", class: "btn quiet", onclick: () => sendReview(caseId, attempt.number, false, errorBox) }, "Mark failed"),
     ),
     errorBox,
   );
 }
 
-function caseCard(caseView, k) {
-  const { case: item, attempts, score } = caseView;
-  let progress = "waiting for a worker";
-  if (score) progress = `${score.passed}/${score.k} passed`;
-  else if (attempts) progress = `${attempts.length} of ${k} attempts done`;
-  return el("section", { class: "card" },
-    el("div", { class: "row" }, el("h2", {}, item.id), el("span", { class: "muted" }, progress)),
-    el("p", {}, item.prompt),
-    el("details", {}, el("summary", {}, "Reference SQL"), el("pre", {}, item.check.reference_sql)),
-    (attempts || []).map((attempt) =>
-      el("div", { class: "attempt" },
-        el("div", { class: "row" },
-          el("strong", {}, `Attempt ${attempt.number}`),
-          kindChip(attempt.outcome),
-        ),
-        detailOf(attempt.outcome) && el("p", { class: "muted" }, detailOf(attempt.outcome)),
-        attempt.reply !== null && el("pre", {}, attempt.reply),
-        attempt.outcome.kind === "needs_review" && reviewForm(item.id, attempt),
-      )),
+function attemptBlock(caseId, attempt) {
+  const detail = detailOf(attempt.outcome);
+  return el("div", { class: "attempt" },
+    el("div", { class: "attempt-head" },
+      attemptDot(attempt),
+      el("strong", {}, `Attempt ${attempt.number}`),
+      kindChip(attempt.outcome),
+    ),
+    detail && el("p", { class: "muted small" }, detail),
+    attempt.reply !== null && el("pre", {}, attempt.reply),
+    attempt.outcome.kind === "needs_review" && reviewForm(caseId, attempt),
   );
+}
+
+function caseRow(caseView, k) {
+  const { case: item, attempts } = caseView;
+  return el("details", {
+    class: "case",
+    ...(opened.has(item.id) ? { open: "" } : {}),
+    ontoggle: (event) => {
+      if (event.target.open) opened.add(item.id);
+      else opened.delete(item.id);
+    },
+  },
+    el("summary", {},
+      el("span", { class: "case-title" },
+        el("span", { class: "case-id" }, item.id),
+        el("span", { class: "case-prompt" }, item.prompt)),
+      attemptDots(attempts, k),
+      scoreBadge(caseView),
+    ),
+    el("div", { class: "case-body" },
+      el("p", { class: "question" }, item.prompt),
+      attempts === null && el("p", { class: "muted" }, "Waiting for a worker to pick this case up."),
+      (attempts || []).map((attempt) => attemptBlock(item.id, attempt)),
+      el("details", { class: "reference" },
+        el("summary", {}, "Reference SQL: the answer we compare against"),
+        el("pre", {}, item.check.reference_sql)),
+    ),
+  );
+}
+
+function statTiles(t, k) {
+  return [
+    statTile(`pass^${k}`, t.passesAll, t.total, `cases where all ${k} attempts passed`, "pass"),
+    statTile(`pass@${k}`, t.passesSome, t.total, `cases where at least 1 of ${k} passed`, "pass"),
+    statTile("Flaky", t.flaky, t.total, "passed sometimes, not always", "flaky"),
+    statTile("Finished", t.finished, t.total, "cases with every attempt in"),
+  ];
+}
+
+function updateBanner(view, t) {
+  const workerMissing = view.status === "RUNNING" && view.cases.some((c) => c.attempts === null);
+  if (workerMissing) {
+    showBanner("No worker is answering. Start one: uv run --env-file .env gauntlet worker", "warn");
+  } else if (view.status === "FAILED") {
+    showBanner("This run failed. A reference query may be broken; the Temporal UI has the details.", "warn");
+  } else if (t.waitingForReview) {
+    const count = t.waitingForReview === 1 ? "1 answer needs" : `${t.waitingForReview} answers need`;
+    showBanner(`${count} a person to decide. Open the cases marked "review" below.`);
+  } else {
+    showBanner("");
+  }
 }
 
 function render(view) {
   const t = totals(view);
   const k = view.config.k;
-  document.title = `${view.suite.name} · ${view.config.agent}`;
-  document.getElementById("title").textContent = `${view.suite.name} · ${view.config.agent}`;
+  const name = `${view.suite.name} · ${agentLabel(view.config.agent)}`;
+  document.title = `${name} | Gauntlet`;
+  document.getElementById("title").textContent = name;
+  document.getElementById("status").replaceChildren(statusChip(view.status));
   document.getElementById("summary").textContent =
-    `${view.status.toLowerCase()} · k = ${k} · pass^${k} ${t.passesAll} of ${t.total} · ` +
-    `pass@${k} ${t.passesSome} of ${t.total} · ${t.finished} of ${t.total} cases finished`;
-  const workerMissing = view.status === "RUNNING" && view.cases.some((c) => c.attempts === null);
-  if (workerMissing) showBanner("No worker is answering. Start one: uv run --env-file .env gauntlet worker");
-  else if (view.status === "FAILED") showBanner("This run failed. A reference query may be broken; the Temporal UI has the details.");
-  else showBanner("");
-  document.getElementById("cases").replaceChildren(...view.cases.map((c) => caseCard(c, k)));
+    `${view.config.agent}, k = ${k}, ${t.total} cases. Run id: ${view.run_id}`;
+  updateBanner(view, t);
+  document.getElementById("stats").replaceChildren(...statTiles(t, k));
+  document.getElementById("legend").replaceChildren(attemptLegend());
+  document.getElementById("cases").replaceChildren(...view.cases.map((c) => caseRow(c, k)));
+}
+
+// Redrawing while a note is being typed would move the cursor, so wait for the next refresh.
+function typingNote() {
+  return document.activeElement && document.activeElement.tagName === "TEXTAREA";
 }
 
 async function refresh() {
@@ -109,12 +174,12 @@ async function refresh() {
   try {
     view = await api(runPath);
   } catch (e) {
-    showBanner(e.message);
+    showBanner(e.message, "warn");
     timer = setTimeout(refresh, 3000);
     return;
   }
   const json = JSON.stringify(view);
-  if (json !== lastJson) {
+  if (json !== lastJson && !typingNote()) {
     lastJson = json;
     render(view);
   }

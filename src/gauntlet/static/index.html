@@ -7,80 +7,128 @@
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
+<header class="topbar">
+  <a class="wordmark" href="/">Gauntlet</a>
+  <nav><a href="/">Runs</a><a href="/docs">API</a></nav>
+</header>
 <main>
-  <h1>Gauntlet</h1>
-  <p class="muted">Durable eval runs on Temporal. Start a run, watch it, and review what no check could decide.</p>
+  <div class="page-head">
+    <h1>Test an agent, k times over</h1>
+    <p class="muted">Each run asks an agent every question in a suite several times, checks each answer, and survives worker crashes. Answers no check can decide wait for you.</p>
+  </div>
 
-  <section class="card">
-    <h2>Start a run</h2>
-    <form id="start-form">
-      <label>Suite <select id="suite"></select></label>
-      <label>Attempts per case (k) <input id="k" type="number" min="1" max="20" value="3"></label>
-      <fieldset>
-        <legend>Agents (one run each)</legend>
-        <div id="agents"></div>
-      </fieldset>
-      <button type="submit">Start</button>
-      <p id="start-error" class="error" role="alert"></p>
-    </form>
-  </section>
+  <div class="split">
+    <section class="card">
+      <h2>Start a run</h2>
+      <form id="start-form">
+        <label class="field">
+          <span class="field-label">Suite</span>
+          <select id="suite"></select>
+        </label>
+        <label class="field">
+          <span class="field-label">Attempts per case (k)</span>
+          <input id="k" type="number" min="1" max="20" value="3">
+          <span class="muted small">Every question is asked this many times.</span>
+        </label>
+        <fieldset class="field">
+          <legend>Agents</legend>
+          <div id="agents" class="options"></div>
+          <span class="muted small">Each agent you pick gets its own run, so you can compare them.</span>
+        </fieldset>
+        <button class="btn wide" type="submit">Start run</button>
+        <p id="start-error" class="error" role="alert"></p>
+      </form>
+      <div class="explain">
+        <p><strong>pass^k</strong> counts the cases where every attempt passed. It measures consistency.</p>
+        <p><strong>pass@k</strong> counts the cases where at least one attempt passed.</p>
+        <p>The gap between them is the flaky cases: right sometimes, wrong other times.</p>
+      </div>
+    </section>
 
-  <section class="card">
-    <div class="row">
-      <h2>Recent runs</h2>
-      <a id="compare-link" class="button secondary" href="/compare">Compare selected</a>
-    </div>
-    <div class="table-box">
-      <table>
-        <thead><tr><th>Compare</th><th>Run</th><th>Status</th><th>Started</th></tr></thead>
-        <tbody id="runs"></tbody>
-      </table>
-    </div>
-  </section>
+    <section class="card">
+      <div class="card-head">
+        <h2>Recent runs</h2>
+        <button id="compare" class="btn quiet" type="button" disabled>Compare selected</button>
+      </div>
+      <div class="table-box">
+        <table>
+          <thead><tr><th><span class="muted">Pick</span></th><th>Run</th><th>Status</th><th>Started</th></tr></thead>
+          <tbody id="runs"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
 </main>
 <script src="/static/app.js"></script>
 <script>
 const selected = new Set();
+let agentNames = [];
+
+function agentOption(name, checked) {
+  return el("label", { class: "option" },
+    el("input", { type: "checkbox", name: "agent", value: name, ...(checked ? { checked: "" } : {}) }),
+    el("span", { class: "option-text" },
+      el("strong", {}, agentLabel(name)),
+      el("span", { class: "muted small" }, name)),
+  );
+}
 
 async function loadOptions() {
   const options = await api("/api/options");
+  agentNames = options.agents;
   document.getElementById("suite").replaceChildren(
     ...options.suites.map((name) => el("option", { value: name }, name)),
   );
   document.getElementById("agents").replaceChildren(
-    ...options.agents.map((name, i) =>
-      el("label", { class: "check" },
-        el("input", { type: "checkbox", name: "agent", value: name, ...(i === 1 ? { checked: "" } : {}) }),
-        name)),
+    ...options.agents.map((name, i) => agentOption(name, i === 1)),
   );
 }
 
-function updateCompareLink() {
-  const ids = [...selected].map(encodeURIComponent).join(",");
-  document.getElementById("compare-link").href = `/compare?runs=${ids}`;
+// Run ids look like "<suite>-<agent>-<time>", so splitting on a known agent gives the suite back.
+function runName(runId) {
+  const agent = agentNames.find((name) => runId.includes(`-${name}-`));
+  if (!agent) return runId;
+  return `${runId.split(`-${agent}-`)[0]} · ${agentLabel(agent)}`;
+}
+
+function updateCompareButton() {
+  const button = document.getElementById("compare");
+  button.disabled = selected.size === 0;
+  button.textContent = selected.size === 0 ? "Compare selected" : `Compare ${selected.size} runs`;
+}
+
+function runRow(run) {
+  const href = `/runs/${encodeURIComponent(run.run_id)}`;
+  return el("tr", {},
+    el("td", {}, el("input", {
+      type: "checkbox",
+      "aria-label": `compare ${run.run_id}`,
+      ...(selected.has(run.run_id) ? { checked: "" } : {}),
+      onchange: (event) => {
+        if (event.target.checked) selected.add(run.run_id);
+        else selected.delete(run.run_id);
+        updateCompareButton();
+      },
+    })),
+    el("td", { class: "run-name" },
+      el("a", { href }, runName(run.run_id)),
+      el("div", { class: "run-id muted small" }, run.run_id)),
+    el("td", {}, statusChip(run.status)),
+    el("td", { class: "muted", title: new Date(run.started).toLocaleString() }, timeAgo(run.started)),
+  );
 }
 
 async function loadRuns() {
   const runs = await api("/api/runs");
-  document.getElementById("runs").replaceChildren(
-    ...runs.map((run) =>
-      el("tr", {},
-        el("td", {}, el("input", {
-          type: "checkbox",
-          "aria-label": `compare ${run.run_id}`,
-          ...(selected.has(run.run_id) ? { checked: "" } : {}),
-          onchange: (event) => {
-            if (event.target.checked) selected.add(run.run_id);
-            else selected.delete(run.run_id);
-            updateCompareLink();
-          },
-        })),
-        el("td", {}, el("a", { href: `/runs/${encodeURIComponent(run.run_id)}` }, run.run_id)),
-        el("td", {}, run.status.toLowerCase()),
-        el("td", {}, new Date(run.started).toLocaleString()),
-      )),
-  );
+  const rows = runs.length
+    ? runs.map(runRow)
+    : [el("tr", {}, el("td", { class: "empty", colspan: "4" }, "No runs yet. Start one on the left."))];
+  document.getElementById("runs").replaceChildren(...rows);
 }
+
+document.getElementById("compare").addEventListener("click", () => {
+  location.href = `/compare?runs=${[...selected].map(encodeURIComponent).join(",")}`;
+});
 
 document.getElementById("start-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -108,8 +156,9 @@ document.getElementById("start-form").addEventListener("submit", async (event) =
   }
 });
 
-loadOptions().catch((e) => { document.getElementById("start-error").textContent = e.message; });
-loadRuns();
+loadOptions()
+  .catch((e) => { document.getElementById("start-error").textContent = e.message; })
+  .then(loadRuns);
 setInterval(loadRuns, 5000);
 </script>
 </body>
