@@ -57,10 +57,15 @@ def check_sql(case: Case, answer: str, db_path: Path) -> Outcome:
     return Passed()
 
 
+def connect_read_only(db_path: Path) -> sqlite3.Connection:
+    """Open a database read-only: mode=ro needs a file: URI, which as_uri() builds on any OS."""
+    return sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)
+
+
 def _run(sql: str, db_path: Path) -> tuple[int, list[Row]]:
     """Run one statement on a read-only connection; return its column count and rows."""
     deadline = time.monotonic() + TIME_LIMIT_SECONDS
-    conn = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)
+    conn = connect_read_only(db_path)
     try:
         conn.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, MAX_VALUE_BYTES)
         conn.set_authorizer(_deny_attach)

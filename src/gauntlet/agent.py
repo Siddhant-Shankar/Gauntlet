@@ -1,8 +1,9 @@
 """What an agent is given and what it gives back, plus a fake agent for tests."""
 
-import sqlite3
 from pathlib import Path
 from typing import Protocol
+
+from gauntlet.sql_check import connect_read_only
 
 FENCE = "```"
 
@@ -32,7 +33,7 @@ class FakeAgent:
 
 def read_schema(db_path: Path) -> str:
     """Return the database's CREATE TABLE statements, so the agent knows the column names."""
-    conn = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)
+    conn = connect_read_only(db_path)
     try:
         rows = conn.execute(
             "SELECT name, sql FROM sqlite_master WHERE type = 'table' ORDER BY name"
