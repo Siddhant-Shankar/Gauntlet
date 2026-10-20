@@ -1,5 +1,4 @@
 import sqlite3
-from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -11,19 +10,6 @@ from gauntlet.sql_check import check_sql
 COUNT = "SELECT COUNT(*) FROM customers"
 COUNTRIES = "SELECT country FROM customers GROUP BY country"
 TOP_TWO = "SELECT name FROM customers ORDER BY id DESC LIMIT 2"
-
-
-@pytest.fixture
-def db_path(tmp_path: Path) -> Path:
-    path = tmp_path / "demo.db"
-    with closing(sqlite3.connect(path)) as conn:
-        conn.execute("CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT, country TEXT)")
-        conn.executemany(
-            "INSERT INTO customers (name, country) VALUES (?, ?)",
-            [("Ana", "USA"), ("Chloe", "Canada"), ("Ben", "USA"), ("Dev", "India")],
-        )
-        conn.commit()
-    return path
 
 
 def make_case(reference_sql: str, ordered: bool = False) -> Case:
