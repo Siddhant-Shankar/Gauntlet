@@ -65,6 +65,61 @@
       "id": "orders_per_month",
       "prompt": "How many orders were placed in each month? Show the month as YYYY-MM and the count, oldest month first.",
       "check": {"kind": "sql_result", "ordered": true, "reference_sql": "SELECT substr(order_date, 1, 7) AS month, COUNT(*) FROM orders GROUP BY month ORDER BY month"}
+    },
+    {
+      "id": "running_revenue",
+      "prompt": "For each month that has paid orders, show the month as YYYY-MM, that month's paid revenue in cents, and the running total of paid revenue up to and including that month. Oldest month first.",
+      "check": {"kind": "sql_result", "ordered": true, "reference_sql": "WITH monthly AS (SELECT substr(o.order_date, 1, 7) AS month, SUM(oi.quantity * p.price_cents) AS revenue FROM orders o JOIN order_items oi ON oi.order_id = o.id JOIN products p ON p.id = oi.product_id WHERE o.status = 'paid' GROUP BY month) SELECT month, revenue, SUM(revenue) OVER (ORDER BY month) FROM monthly ORDER BY month"}
+    },
+    {
+      "id": "revenue_change",
+      "prompt": "For each month with paid orders except the first, show the month as YYYY-MM and how much paid revenue changed from the month before, in cents (negative if it went down). Oldest month first.",
+      "check": {"kind": "sql_result", "ordered": true, "reference_sql": "WITH monthly AS (SELECT substr(o.order_date, 1, 7) AS month, SUM(oi.quantity * p.price_cents) AS revenue FROM orders o JOIN order_items oi ON oi.order_id = o.id JOIN products p ON p.id = oi.product_id WHERE o.status = 'paid' GROUP BY month), changes AS (SELECT month, revenue - LAG(revenue) OVER (ORDER BY month) AS change FROM monthly) SELECT month, change FROM changes WHERE change IS NOT NULL ORDER BY month"}
+    },
+    {
+      "id": "category_share",
+      "prompt": "What share of paid revenue does each product category bring in? Show the category and its percentage of the total, rounded to one decimal place.",
+      "check": {"kind": "sql_result", "reference_sql": "WITH by_category AS (SELECT p.category, SUM(oi.quantity * p.price_cents) AS revenue FROM orders o JOIN order_items oi ON oi.order_id = o.id JOIN products p ON p.id = oi.product_id WHERE o.status = 'paid' GROUP BY p.category) SELECT category, ROUND(100.0 * revenue / (SELECT SUM(revenue) FROM by_category), 1) FROM by_category"}
+    },
+    {
+      "id": "avg_order_by_country",
+      "prompt": "What is the average value of a paid order in each country, in cents? Show the country and the average.",
+      "check": {"kind": "sql_result", "reference_sql": "WITH totals AS (SELECT o.id, c.country, SUM(oi.quantity * p.price_cents) AS total FROM orders o JOIN customers c ON c.id = o.customer_id JOIN order_items oi ON oi.order_id = o.id JOIN products p ON p.id = oi.product_id WHERE o.status = 'paid' GROUP BY o.id) SELECT country, AVG(total) FROM totals GROUP BY country"}
+    },
+    {
+      "id": "above_average_orders",
+      "prompt": "Which paid orders are worth more than the average paid order? Show the order id and its value in cents.",
+      "check": {"kind": "sql_result", "reference_sql": "WITH totals AS (SELECT o.id, SUM(oi.quantity * p.price_cents) AS total FROM orders o JOIN order_items oi ON oi.order_id = o.id JOIN products p ON p.id = oi.product_id WHERE o.status = 'paid' GROUP BY o.id) SELECT id, total FROM totals WHERE total > (SELECT AVG(total) FROM totals)"}
+    },
+    {
+      "id": "median_paid_order",
+      "prompt": "What is the median value of a paid order, in cents? When there is an even number of orders, the median is the average of the two middle values.",
+      "check": {"kind": "sql_result", "reference_sql": "WITH totals AS (SELECT o.id, SUM(oi.quantity * p.price_cents) AS total FROM orders o JOIN order_items oi ON oi.order_id = o.id JOIN products p ON p.id = oi.product_id WHERE o.status = 'paid' GROUP BY o.id), ranked AS (SELECT total, ROW_NUMBER() OVER (ORDER BY total) AS n, COUNT(*) OVER () AS count FROM totals) SELECT AVG(total) FROM ranked WHERE n IN ((count + 1) / 2, (count + 2) / 2)"}
+    },
+    {
+      "id": "top_product_per_category",
+      "prompt": "For each product category, which product brought in the most paid revenue? Show the category, the product name and that revenue in cents.",
+      "check": {"kind": "sql_result", "reference_sql": "WITH revenue AS (SELECT p.category, p.name, SUM(oi.quantity * p.price_cents) AS revenue FROM orders o JOIN order_items oi ON oi.order_id = o.id JOIN products p ON p.id = oi.product_id WHERE o.status = 'paid' GROUP BY p.id), ranked AS (SELECT category, name, revenue, RANK() OVER (PARTITION BY category ORDER BY revenue DESC) AS place FROM revenue) SELECT category, name, revenue FROM ranked WHERE place = 1"}
+    },
+    {
+      "id": "bought_all_stationery",
+      "prompt": "Which customers have bought every product in the stationery category, counting only paid orders? Give just their names.",
+      "check": {"kind": "sql_result", "reference_sql": "SELECT c.name FROM customers c JOIN orders o ON o.customer_id = c.id JOIN order_items oi ON oi.order_id = o.id JOIN products p ON p.id = oi.product_id WHERE o.status = 'paid' AND p.category = 'stationery' GROUP BY c.id HAVING COUNT(DISTINCT p.id) = (SELECT COUNT(*) FROM products WHERE category = 'stationery')"}
+    },
+    {
+      "id": "second_order_date",
+      "prompt": "For each customer with at least two orders of any status, show their name and the date of their second order.",
+      "check": {"kind": "sql_result", "reference_sql": "WITH numbered AS (SELECT customer_id, order_date, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY order_date, id) AS n FROM orders) SELECT c.name, numbered.order_date FROM numbered JOIN customers c ON c.id = numbered.customer_id WHERE numbered.n = 2"}
+    },
+    {
+      "id": "quick_first_purchase",
+      "prompt": "For each signup month (YYYY-MM), show how many customers signed up and how many of them made a paid order within 14 days of signing up (day 14 counts). Oldest month first.",
+      "check": {"kind": "sql_result", "ordered": true, "reference_sql": "WITH quick AS (SELECT DISTINCT c.id FROM customers c JOIN orders o ON o.customer_id = c.id WHERE o.status = 'paid' AND julianday(o.order_date) - julianday(c.signup_date) BETWEEN 0 AND 14) SELECT substr(c.signup_date, 1, 7) AS month, COUNT(*), COUNT(quick.id) FROM customers c LEFT JOIN quick ON quick.id = c.id GROUP BY month ORDER BY month"}
+    },
+    {
+      "id": "above_country_average",
+      "prompt": "Which customers spent more on paid orders than the average spend of the paying customers in their own country? Give just their names.",
+      "check": {"kind": "sql_result", "reference_sql": "WITH spend AS (SELECT c.id, c.name, c.country, SUM(oi.quantity * p.price_cents) AS spent FROM customers c JOIN orders o ON o.customer_id = c.id JOIN order_items oi ON oi.order_id = o.id JOIN products p ON p.id = oi.product_id WHERE o.status = 'paid' GROUP BY c.id) SELECT name FROM spend AS s WHERE spent > (SELECT AVG(spent) FROM spend WHERE country = s.country)"}
     }
   ]
 }
