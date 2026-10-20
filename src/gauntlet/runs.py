@@ -38,7 +38,7 @@ async def start_run(
 
 async def run_results(client: Client, run_id: str) -> dict[str, list[Attempt]]:
     handle = client.get_workflow_handle(run_id, result_type=dict[str, list[Attempt]])
-    results: dict[str, list[Attempt]] = await handle.result()
+    results: dict[str, list[Attempt]] = await handle.result()  # result() is typed Any
     return results
 
 
