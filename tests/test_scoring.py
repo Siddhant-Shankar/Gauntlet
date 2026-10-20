@@ -15,21 +15,18 @@ def test_passing_every_attempt_passes_all_and_some() -> None:
     score = score_case("q", [PASS, PASS, PASS])
     assert score.passes_all is True
     assert score.passes_some is True
-    assert score.pass_rate == 1.0
 
 
 def test_passing_some_attempts_passes_some_but_not_all() -> None:
     score = score_case("q", [PASS, PASS, FAIL])
     assert score.passes_all is False
     assert score.passes_some is True
-    assert score.pass_rate == pytest.approx(2 / 3)
 
 
 def test_passing_no_attempts_passes_neither() -> None:
     score = score_case("q", [FAIL, FAIL, FAIL])
     assert score.passes_all is False
     assert score.passes_some is False
-    assert score.pass_rate == 0.0
 
 
 def test_an_errored_attempt_counts_as_not_passed() -> None:
@@ -56,7 +53,6 @@ def test_every_kind_is_counted() -> None:
         reviewed=0,
         passes_all=False,
         passes_some=True,
-        pass_rate=0.4,
     )
 
 
