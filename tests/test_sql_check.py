@@ -169,10 +169,18 @@ def test_runaway_query_hits_the_time_limit(db_path: Path, monkeypatch: pytest.Mo
 
 
 @pytest.mark.parametrize(
-    "answer", ["Sorry, I can't tell from the data.", "Selection is unclear.", "", "   "]
+    "answer",
+    ["Sorry, I can't tell from the data.", "Selection is unclear.", "", "   ", "-- no query"],
 )
 def test_an_answer_that_is_not_sql_needs_review(db_path: Path, answer: str) -> None:
     assert check_sql(make_case(COUNT), answer, db_path) == NeedsReview(reason="no SQL in answer")
+
+
+@pytest.mark.parametrize(
+    "answer", [f"-- count them\n{COUNT}", f"/* count them */ {COUNT}", f"-- a\n-- b\n{COUNT}"]
+)
+def test_sql_after_a_comment_is_still_checked(db_path: Path, answer: str) -> None:
+    assert check_sql(make_case(COUNT), answer, db_path) == Passed()
 
 
 def test_broken_reference_sql_stops_the_run(db_path: Path) -> None:
