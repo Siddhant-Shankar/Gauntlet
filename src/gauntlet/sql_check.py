@@ -94,8 +94,17 @@ def _deny_attach(action: int, *_: str | None) -> int:
 
 
 def _looks_like_sql(answer: str) -> bool:
-    words = answer.split(maxsplit=1)
+    words = _without_leading_comments(answer).split(maxsplit=1)
     return bool(words) and words[0].upper() in SQL_FIRST_WORDS
+
+
+def _without_leading_comments(answer: str) -> str:
+    """Drop -- and /* */ comments in front of the first word, as SQLite itself would."""
+    text = answer.lstrip()
+    while text.startswith(("--", "/*")):
+        end = "\n" if text.startswith("--") else "*/"
+        text = text.partition(end)[2].lstrip()
+    return text
 
 
 def _columns(count: int) -> str:
