@@ -129,16 +129,20 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("-k", type=int, default=5)
     run.add_argument("--agent", choices=MODELS, default=DEFAULT_MODEL)
 
-    web = commands.add_parser("web", help="serve the web page: start, watch and review runs")
-    web.add_argument("--suites", type=Path, default=Path("demo"), help="folder of suite files")
-    web.add_argument("--db", type=Path, default=Path("demo/shop.db"))
-    web.add_argument("--host", default="127.0.0.1")
-    web.add_argument("--port", type=int, default=8000)
+    # Options both commands that serve the web app take.
+    serving = argparse.ArgumentParser(add_help=False)
+    serving.add_argument("--suites", type=Path, default=Path("demo"), help="folder of suite files")
+    serving.add_argument("--db", type=Path, default=Path("demo/shop.db"))
+    serving.add_argument("--port", type=int, default=8000, help="web app port")
 
-    up = commands.add_parser("up", help="start Temporal, a worker and the web app, all at once")
-    up.add_argument("--suites", type=Path, default=Path("demo"), help="folder of suite files")
-    up.add_argument("--db", type=Path, default=Path("demo/shop.db"))
-    up.add_argument("--port", type=int, default=8000, help="web app port")
+    web = commands.add_parser(
+        "web", parents=[serving], help="serve the web page: start, watch and review runs"
+    )
+    web.add_argument("--host", default="127.0.0.1")
+
+    up = commands.add_parser(
+        "up", parents=[serving], help="start Temporal, a worker and the web app, all at once"
+    )
     up.add_argument("--temporal-port", type=int, default=7233)
     up.add_argument("--temporal-db", type=Path, default=Path("temporal.db"), help="saved runs")
     return parser
