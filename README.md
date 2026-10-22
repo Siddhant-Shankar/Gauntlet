@@ -91,6 +91,9 @@ flowchart LR
   workflow query, and send a person's verdict through a workflow update. Restarting them loses
   nothing.
 
+More diagrams are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the models, one attempt step by
+step, a worker crashing mid-run, and the threads inside a worker.
+
 ## The demo suite
 
 The demo is a small shop database with customers, products, orders and order items
