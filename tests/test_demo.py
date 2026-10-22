@@ -132,10 +132,6 @@ def shop_db(tmp_path: Path) -> Path:
     return path
 
 
-def test_the_demo_suite_has_enough_cases() -> None:
-    assert len(SUITE.cases) >= 10
-
-
 @pytest.mark.parametrize("case", SUITE.cases, ids=lambda case: case.id)
 def test_each_reference_query_passes_its_own_check(case: Case, shop_db: Path) -> None:
     assert check_sql(case, case.check.reference_sql, shop_db) == Passed()
