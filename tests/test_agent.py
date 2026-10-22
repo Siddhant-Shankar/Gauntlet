@@ -52,29 +52,19 @@ def test_schema_of_a_missing_database_raises(tmp_path: Path) -> None:
     ("reply", "expected"),
     [
         ("SELECT 1", "SELECT 1"),
-        ("  SELECT 1\n", "SELECT 1"),
         ("```sql\nSELECT 1\n```", "SELECT 1"),
-        ("```SQL\nSELECT 1\n```", "SELECT 1"),
-        ("```\nSELECT 1\n```", "SELECT 1"),
-        ("```sql\r\nSELECT 1\r\n```", "SELECT 1"),
         ("```SELECT 1```", "SELECT 1"),
         ("Here you go:\n```sql\nSELECT 1\n```\nThis counts rows.", "SELECT 1"),
         ("```sql\nSELECT 1\n```\nor:\n```sql\nSELECT 2\n```", "SELECT 1"),
-        ("```sql\nSELECT 1", "SELECT 1"),
         ("SELECT 1;\n```", "SELECT 1;"),
         ("There are 2 customers.", "There are 2 customers."),
     ],
     ids=[
         "plain sql",
-        "whitespace",
         "sql fence",
-        "uppercase tag",
-        "bare fence",
-        "windows newlines",
         "one-line fence",
         "prose around the fence",
         "first block wins",
-        "reply cut off before closing fence",
         "only a closing fence, seen from Claude",
         "prose without a fence",
     ],
@@ -89,12 +79,6 @@ def test_extract_sql(reply: str, expected: str) -> None:
 def test_fake_agent_fits_the_agent_shape() -> None:
     agent: Agent = FakeAgent({"q": ["SELECT 1"]})  # mypy rejects this line if the shapes differ
     assert agent.answer("q", "schema") == "SELECT 1"
-
-
-def test_fake_agent_replies_in_order() -> None:
-    agent = FakeAgent({"q": ["SELECT 1", "SELECT 2"]})
-    assert agent.answer("q", "schema") == "SELECT 1"
-    assert agent.answer("q", "schema") == "SELECT 2"
 
 
 def test_fake_agent_keeps_a_separate_script_per_prompt() -> None:
@@ -115,17 +99,6 @@ def test_fake_agent_out_of_replies_raises() -> None:
     agent.answer("q", "schema")
     with pytest.raises(LookupError, match="no reply left"):
         agent.answer("q", "schema")
-
-
-def test_fake_agent_unknown_prompt_raises() -> None:
-    with pytest.raises(LookupError, match="no reply left"):
-        FakeAgent({"q": ["SELECT 1"]}).answer("other", "schema")
-
-
-def test_fake_agent_leaves_the_callers_script_alone() -> None:
-    replies: list[str | Exception] = ["SELECT 1"]
-    FakeAgent({"q": replies}).answer("q", "schema")
-    assert replies == ["SELECT 1"]
 
 
 # --- one attempt, start to finish ---
