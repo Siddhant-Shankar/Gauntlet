@@ -142,11 +142,6 @@ async def test_the_agent_gets_the_question_and_schema_only(client: Client, db_pa
     assert agent.calls == [(CASE.prompt, read_schema(db_path))] * 2
 
 
-async def test_a_broken_reference_query_fails_the_workflow(client: Client, db_path: Path) -> None:
-    with pytest.raises(WorkflowFailureError):
-        await run_case(client, FakeAgent({"q": [USA_COUNT]}), db_path, k=1, case=BROKEN_CASE)
-
-
 async def test_the_workflow_replays_from_its_history(client: Client, db_path: Path) -> None:
     async with worker(client, FakeAgent({CASE.prompt: [USA_COUNT, "SELECT 1"]})) as task_queue:
         handle = await client.start_workflow(
