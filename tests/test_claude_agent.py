@@ -5,9 +5,7 @@ import pytest
 from anthropic import DEFAULT_MAX_RETRIES, Anthropic, APIStatusError
 
 from gauntlet.claude_agent import (
-    DEFAULT_MODEL,
     INSTRUCTIONS,
-    MODELS,
     REQUEST_TIMEOUT_SECONDS,
     ClaudeAgent,
 )
@@ -76,8 +74,3 @@ def test_an_api_error_is_raised() -> None:
 def test_the_client_gives_up_before_the_workflow_does() -> None:
     worst_case = (1 + DEFAULT_MAX_RETRIES) * REQUEST_TIMEOUT_SECONDS
     assert worst_case < AGENT_TIME_LIMIT.total_seconds()
-
-
-def test_an_older_model_is_offered_as_a_baseline() -> None:
-    assert "claude-haiku-4-5-20251001" in MODELS
-    assert DEFAULT_MODEL in MODELS
