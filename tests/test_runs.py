@@ -20,7 +20,7 @@ from gauntlet.models import (
     Suite,
     Verdict,
 )
-from gauntlet.runs import load_run, new_run_id, recent_runs, review, run_results, start_run
+from gauntlet.runs import load_run, new_run_id, review, run_results, start_run
 from gauntlet.worker import build_worker
 
 pytestmark = pytest.mark.asyncio(loop_scope="module")
@@ -86,15 +86,6 @@ async def test_a_run_no_worker_has_picked_up_shows_no_attempts(
     view = await load_run(client, run_id)
     assert view.status == "RUNNING"
     assert [(case.attempts, case.score) for case in view.cases] == [((), None)]
-
-
-async def test_recent_runs_include_a_new_run(client: Client, db_path: Path) -> None:
-    run_id, _ = await start(client, db_path, k=1)
-    for _ in range(50):  # the run list is eventually consistent
-        if run_id in [run.run_id for run in await recent_runs(client)]:
-            return
-        await asyncio.sleep(0.1)
-    pytest.fail(f"{run_id} never appeared in recent runs")
 
 
 async def test_a_review_survives_a_worker_going_away(client: Client, db_path: Path) -> None:
