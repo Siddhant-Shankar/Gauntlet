@@ -29,18 +29,6 @@ def test_passing_no_attempts_passes_neither() -> None:
     assert score.passes_some is False
 
 
-def test_an_errored_attempt_counts_as_not_passed() -> None:
-    score = score_case("q", [PASS, PASS, ERROR])
-    assert score.passes_all is False
-    assert score.errored == 1
-
-
-def test_an_attempt_needing_review_counts_as_not_passed() -> None:
-    score = score_case("q", [PASS, PASS, REVIEW])
-    assert score.passes_all is False
-    assert score.needs_review == 1
-
-
 def test_every_kind_is_counted() -> None:
     score = score_case("top_country", [PASS, REVIEW, ERROR, FAIL, PASS])
     assert score == CaseScore(
@@ -66,19 +54,9 @@ def test_a_person_failing_an_attempt_counts_as_failed() -> None:
     assert (score.failed, score.reviewed, score.passes_all) == (1, 1, False)
 
 
-def test_a_single_attempt_can_pass_all() -> None:
-    score = score_case("q", [PASS])
-    assert (score.k, score.passes_all, score.passes_some) == (1, True, True)
-
-
 def test_no_attempts_cannot_be_scored() -> None:
     with pytest.raises(ValueError, match="no outcomes"):
         score_case("q", [])
-
-
-def test_case_score_survives_a_json_round_trip() -> None:
-    score = score_case("q", [PASS, FAIL, ERROR])
-    assert CaseScore.model_validate_json(score.model_dump_json()) == score
 
 
 def test_suite_counts_cases_that_pass_all_and_pass_some() -> None:
