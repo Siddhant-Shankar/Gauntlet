@@ -7,6 +7,53 @@ Gauntlet asks an agent every question in a test suite k times, checks each answe
 Temporal workflow, so if a worker crashes, the run picks up where it stopped without asking the
 agent again for answers it already has. Answers no check can decide wait for a person to review.
 
+## Try it: the live demo and retries
+
+You need Git, [uv](https://docs.astral.sh/uv/) and an Anthropic API key in `.env`. The full setup
+is in [Run it locally](#run-it-locally).
+
+```bash
+uv sync
+uv run gauntlet demo-db demo/shop.sql demo/shop.db   # build the demo database once
+```
+
+**The live demo.** One command starts a local Temporal server, a worker and the web app:
+
+```bash
+uv run --env-file .env gauntlet up
+```
+
+Open http://127.0.0.1:8000, tick Claude Haiku 5.5, set k = 2 and press Start. Temporal's own UI,
+with every run's history, is at http://localhost:8233.
+
+**Retries: stop the worker in the middle of a run.** Run the three parts in separate terminals
+(this needs the [Temporal CLI](https://docs.temporal.io/cli/setup-cli)):
+
+```bash
+temporal server start-dev --db-filename temporal.db   # 1. Temporal
+uv run --env-file .env gauntlet worker                # 2. the worker: Ctrl+C this one mid-run
+uv run gauntlet web                                   # 3. the web app
+```
+
+1. Start a run on the web page.
+2. While it runs, press Ctrl+C in terminal 2. The run page says no worker is answering.
+3. Start the worker again. After about 10 to 20 seconds (a 6-second heartbeat timeout, then a
+   10-second timeout on the stopped worker's own queue), the run carries on. Attempts that had
+   already finished are not asked again.
+4. In Temporal's UI, open one of the run's cases (`<run id>/<case id>`). The `ask_agent` that was cut
+   off shows attempt 2.
+
+Without the Temporal CLI, press Ctrl+C on `gauntlet up` instead and start it again. Everything
+restarts, and the run resumes from `temporal.db`.
+
+**Retries without an API key.** These tests use a fake agent:
+
+```bash
+uv run pytest tests/test_worker.py                                     # kills a real worker process mid-run (~20 s)
+uv run pytest tests/test_workflows.py -k "not_retried or replays"     # agent errors are final; replay matches the history
+uv run pytest tests/test_activities.py -k "heartbeat or not_retried"  # heartbeats; errors are not retried
+```
+
 ![A run page: Claude Haiku 4.5 on the 24-question demo suite, 21 of 24 passed](docs/run-page.png)
 
 *A real run: Claude Haiku 4.5, k = 1, on the demo suite. The three red cases are hard questions it
