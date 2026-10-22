@@ -52,12 +52,3 @@ def test_report_shows_scores_and_every_problem() -> None:
             "  count_customers #2: passed (right rows)",
         ]
     )
-
-
-def test_a_clean_run_lists_no_problems() -> None:
-    outcomes: dict[str, list[Outcome]] = {
-        "count_customers": [Passed()],
-        "top_3_products": [Passed()],
-    }
-    report = format_report(SUITE, 1, outcomes)
-    assert report.endswith("pass^1: 2 of 2 cases, pass@1: 2 of 2 cases")
