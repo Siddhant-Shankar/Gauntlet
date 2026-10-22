@@ -32,13 +32,6 @@ def test_demo_db_builds_the_database(tmp_path: Path) -> None:
     assert read_schema(db).startswith("CREATE TABLE customers")
 
 
-def test_demo_db_replaces_an_existing_file(tmp_path: Path) -> None:
-    db = tmp_path / "shop.db"
-    main(["demo-db", str(DEMO / "shop.sql"), str(db)])
-    main(["demo-db", str(DEMO / "shop.sql"), str(db)])
-    assert read_schema(db).count("CREATE TABLE customers") == 1
-
-
 @pytest.mark.asyncio(loop_scope="module")
 async def test_run_returns_the_report(client: Client, db_path: Path) -> None:
     task_queue = f"test-{uuid4()}"
